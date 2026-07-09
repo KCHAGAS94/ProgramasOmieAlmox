@@ -1,0 +1,3126 @@
+import { useState, useEffect, useMemo } from 'react';
+import axios from 'axios';
+import {
+  Package, Search, Plus, Link2, ArrowLeft, RefreshCw, Rocket,
+  ClipboardList, Trash2, ExternalLink, Settings, X, Printer,
+  CheckCircle, AlertCircle, Clock, ArrowUpCircle, TrendingUp,
+  Sun, Moon, Lock, MailOpen, Hash, FileText, Building2, MapPin, Loader2
+} from 'lucide-react';
+
+const API_BASE = `http://${window.location.hostname}:4002/api`;
+
+// Função para decodificar entidades HTML
+function decodeHtmlEntities(text) {
+  if (!text) return text;
+  return text
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+// Função para verificar se dois códigos são similares
+function codigosSaoSimilares(codigo1, codigo2) {
+  if (!codigo1 || !codigo2) return false;
+  if (codigo1 === codigo2) return true;
+
+  const prefixo1 = codigo1.slice(0, -1);
+  const prefixo2 = codigo2.slice(0, -1);
+
+  if (prefixo1 === prefixo2 && prefixo1.length > 0) {
+    return true;
+  }
+
+  const diff = Math.abs(codigo1.length - codigo2.length);
+  if (diff === 1) {
+    const maior = codigo1.length > codigo2.length ? codigo1 : codigo2;
+    const menor = codigo1.length > codigo2.length ? codigo2 : codigo1;
+
+    if (maior.slice(0, -1) === menor) {
+      return true;
+    }
+
+    if (maior.length > 2 && menor.length > 1) {
+      if (maior.slice(0, -2) === menor.slice(0, -1)) {
+        return true;
+      }
+    }
+  }
+
+  if (codigo1.length > 2 && codigo2.length > 2) {
+    const prefixo1_2 = codigo1.slice(0, -2);
+    const prefixo2_2 = codigo2.slice(0, -2);
+
+    if (prefixo1_2 === prefixo2_2 && prefixo1_2.length > 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function App() {
+  const [autenticado, setAutenticado] = useState(false);
+  const [usuarioLogado, setUsuarioLogado] = useState(null);
+  const [numeroPedido, setNumeroPedido] = useState('');
+  const [linkAtual, setLinkAtual] = useState('');
+  const [pedidoData, setPedidoData] = useState(null);
+  const [nfes, setNfes] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [associacoes, setAssociacoes] = useState({});
+  const [associandoItem, setAssociandoItem] = useState(null);
+  const [debugData, setDebugData] = useState(null);
+  const [adicionandoNFe, setAdicionandoNFe] = useState(false);
+  const [conversoes, setConversoes] = useState({});
+  const [configurandoConversao, setConfigurandoConversao] = useState(null);
+  const [conferencias, setConferencias] = useState({});
+  const [associacoesManuais, setAssociacoesManuais] = useState({});
+  const [codigosNumericos, setCodigosNumericos] = useState({});
+  const [modalContagemAberto, setModalContagemAberto] = useState(false);
+  const [itemSelecionadoIdx, setItemSelecionadoIdx] = useState(null);
+  const [infoModal, setInfoModal] = useState(null);
+  const [novaQuantidadeContagem, setNovaQuantidadeContagem] = useState('');
+  const [dadosConferencia, setDadosConferencia] = useState({});
+
+  // Estado para modal DANFE (visualização formatada do XML)
+  const [modalDanfe, setModalDanfe] = useState(null); // null ou { dados, loading }
+  const [loadingDanfe, setLoadingDanfe] = useState(false);
+
+  // Origem dos dados do pedido (cache ou api)
+  const [origemPedido, setOrigemPedido] = useState(null);
+  const [pedidoSalvoEm, setPedidoSalvoEm] = useState(null);
+
+  // Estados para lista de pedidos
+  const [telaAtual, setTelaAtual] = useState('lista');
+  const [listaPedidos, setListaPedidos] = useState([]);
+  const [filtroStatus, setFiltroStatus] = useState('todos');
+  const [buscaPedido, setBuscaPedido] = useState('');
+
+  // Sub-aba dentro da tela de conferência
+  const [abaDetalhes, setAbaDetalhes] = useState('recebimento');
+
+  // Dark mode
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('darkMode') === 'true';
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('darkMode', darkMode);
+  }, [darkMode]);
+
+  // Verifica autenticação ao carregar
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenUrl = urlParams.get('token');
+    const usuarioUrl = urlParams.get('usuario');
+
+    if (tokenUrl && usuarioUrl) {
+      localStorage.setItem('token', tokenUrl);
+      localStorage.setItem('usuario', usuarioUrl);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    const token = localStorage.getItem('token');
+    const usuarioStr = localStorage.getItem('usuario');
+
+    if (token && usuarioStr) {
+      try {
+        const usuario = JSON.parse(usuarioStr);
+        setUsuarioLogado(usuario);
+        setAutenticado(true);
+      } catch (e) {
+        console.error('Erro ao parsear usuário:', e);
+        setAutenticado(false);
+      }
+    }
+  }, []);
+
+  const buscarDados = async (numPedidoParam = null, forcarAtualizacao = false) => {
+    const numPedido = numPedidoParam || numeroPedido;
+
+    if (!numPedido || !numPedido.trim()) {
+      setError('Digite o número do pedido');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    setPedidoData(null);
+    setNfes([]);
+    setAssociacoes({});
+    setCodigosNumericos({});
+    setOrigemPedido(null);
+    setPedidoSalvoEm(null);
+
+    try {
+      const pedidoResponse = await axios.post(`${API_BASE}/consultar-pedido`, {
+        numero_pedido: numPedido.trim(),
+        forcar_atualizacao: forcarAtualizacao
+      });
+
+      if (pedidoResponse.data.success) {
+        setPedidoData(pedidoResponse.data.pedido);
+        setOrigemPedido(pedidoResponse.data.origem || 'api');
+        setPedidoSalvoEm(pedidoResponse.data.salvo_em || null);
+
+        const pedido = pedidoResponse.data.pedido;
+        if (pedido && pedido.produtos_consulta) {
+          const mapeamento = {};
+          pedido.produtos_consulta.forEach(produto => {
+            if (produto.cProduto && produto.nCodProd) {
+              mapeamento[produto.cProduto] = produto.nCodProd;
+            }
+          });
+          setCodigosNumericos(mapeamento);
+          console.log('[CODIGOS] Mapeamento criado:', Object.keys(mapeamento).length, 'produtos');
+        }
+      }
+
+      try {
+        const buscarPedidoResponse = await axios.post(`${API_BASE}/buscar-por-pedido`, {
+          numero_pedido: numPedido.trim()
+        });
+
+        if (buscarPedidoResponse.data.success && buscarPedidoResponse.data.encontrado) {
+          const nfesSalvas = buscarPedidoResponse.data.nfes || [];
+
+          if (nfesSalvas.length > 0) {
+            console.log(`Encontradas ${nfesSalvas.length} NFe(s) salva(s)`);
+
+            const nfesProcessadas = [];
+            for (const nfeSalva of nfesSalvas) {
+              try {
+                const xmlResponse = await axios.post(`${API_BASE}/baixar-xml`, {
+                  link: nfeSalva.link_xml
+                });
+
+                if (xmlResponse.data.success) {
+                  nfesProcessadas.push({
+                    numero_nfe: nfeSalva.numero_nfe,
+                    link_xml: nfeSalva.link_xml,
+                    itens: xmlResponse.data.itens,
+                    data_processamento: nfeSalva.data_processamento,
+                    associacoes: nfeSalva.associacoes || {}
+                  });
+                }
+              } catch (xmlErr) {
+                console.error(`Erro ao baixar XML da NFe ${nfeSalva.numero_nfe}:`, xmlErr.message);
+              }
+            }
+
+            setNfes(nfesProcessadas);
+
+            const todasAssociacoes = {};
+            nfesProcessadas.forEach(nfe => {
+              Object.entries(nfe.associacoes || {}).forEach(([codigoPedido, codigoNFe]) => {
+                if (!todasAssociacoes[codigoPedido]) {
+                  todasAssociacoes[codigoPedido] = [];
+                }
+                if (!todasAssociacoes[codigoPedido].includes(codigoNFe)) {
+                  todasAssociacoes[codigoPedido].push(codigoNFe);
+                }
+              });
+            });
+            setAssociacoes(todasAssociacoes);
+
+            for (const nfe of nfesProcessadas) {
+              await carregarContagensDetalhadas(numPedido.trim(), nfe.numero_nfe);
+            }
+
+            setSuccess(`Carregadas ${nfesProcessadas.length} NFe(s) do pedido!`);
+          } else {
+            setSuccess('Pedido carregado. Use o botão "Adicionar NFe" para processar uma nota fiscal.');
+          }
+        } else {
+          setSuccess('Pedido carregado. Use o botão "Adicionar NFe" para processar uma nota fiscal.');
+        }
+      } catch (buscarErr) {
+        console.warn('Erro ao buscar NFes salvas:', buscarErr.message);
+        setSuccess('Pedido carregado. Use o botão "Adicionar NFe" para processar uma nota fiscal.');
+      }
+
+      setDebugData({
+        api_url: 'https://app.omie.com.br/api/v1/produtos/pedidocompra/',
+        api_call: 'ConsultarPedCompra',
+        pedido_completo: pedidoResponse.data.pedido
+      });
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Erro ao buscar dados');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const adicionarNovaFe = async () => {
+    if (!linkAtual.trim()) {
+      setError('Digite o link do XML da NFe');
+      return;
+    }
+
+    if (!linkAtual.startsWith('http')) {
+      setError('Link inválido. Deve começar com http:// ou https://');
+      return;
+    }
+
+    if (!pedidoData) {
+      setError('Carregue o pedido primeiro');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const xmlResponse = await axios.post(`${API_BASE}/baixar-xml`, {
+        link: linkAtual.trim()
+      });
+
+      if (xmlResponse.data.success) {
+        const novaFe = {
+          numero_nfe: xmlResponse.data.itens[0]?.numeroNF || 'N/A',
+          link_xml: linkAtual.trim(),
+          itens: xmlResponse.data.itens,
+          data_processamento: new Date().toISOString(),
+          associacoes: {}
+        };
+
+        const jaExiste = nfes.some(nfe => nfe.numero_nfe === novaFe.numero_nfe);
+        if (jaExiste) {
+          setError(`NFe ${novaFe.numero_nfe} já foi processada para este pedido`);
+          setLoading(false);
+          return;
+        }
+
+        const nfesAtualizadas = [...nfes, novaFe];
+        setNfes(nfesAtualizadas);
+
+        await axios.post(`${API_BASE}/salvar-associacoes`, {
+          numero_pedido: numeroPedido,
+          numero_nfe: novaFe.numero_nfe,
+          associacoes: novaFe.associacoes,
+          link_xml: novaFe.link_xml
+        });
+
+        await carregarContagensDetalhadas(numeroPedido, novaFe.numero_nfe);
+
+        setSuccess(`NFe ${novaFe.numero_nfe} adicionada com sucesso!`);
+        setLinkAtual('');
+        setAdicionandoNFe(false);
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Erro ao processar NFe');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const associarItem = async (codigoPedido, codigoNFe, numeroNFe) => {
+    console.log(`[ASSOCIAR] ${codigoPedido} -> ${codigoNFe} (NFe: ${numeroNFe})`);
+
+    const associacoesAtuais = associacoes[codigoPedido] || [];
+    const novasAssociacoes = {
+      ...associacoes,
+      [codigoPedido]: [...associacoesAtuais, codigoNFe]
+    };
+
+    setAssociacoes(novasAssociacoes);
+    setAssociandoItem(null);
+
+    const nfesAtualizadas = nfes.map(nfe => {
+      if (nfe.numero_nfe === numeroNFe) {
+        return {
+          ...nfe,
+          associacoes: {
+            ...nfe.associacoes,
+            [codigoPedido]: codigoNFe
+          }
+        };
+      }
+      return nfe;
+    });
+
+    setNfes(nfesAtualizadas);
+
+    try {
+      const nfeAtualizada = nfesAtualizadas.find(n => n.numero_nfe === numeroNFe);
+      await axios.post(`${API_BASE}/salvar-associacoes`, {
+        numero_pedido: numeroPedido,
+        numero_nfe: numeroNFe,
+        associacoes: nfeAtualizada.associacoes,
+        link_xml: nfeAtualizada.link_xml
+      });
+
+      const chave = `${numeroPedido}_${codigoPedido}`;
+      const assocAtuais = associacoesManuais[chave] || [];
+      setAssociacoesManuais(prev => ({
+        ...prev,
+        [chave]: Array.isArray(assocAtuais) ? [...assocAtuais, codigoNFe] : [codigoNFe]
+      }));
+
+      console.log(`Associação ${novasAssociacoes[codigoPedido].length} adicionada para ${codigoPedido}`);
+      setSuccess(`Associação adicionada! Total: ${novasAssociacoes[codigoPedido].length} item(ns)`);
+    } catch (error) {
+      console.error('Erro ao salvar associação:', error.message);
+      setError('Associação criada localmente, mas não foi possível salvar no banco');
+    }
+  };
+
+  const removerAssociacao = async (codigoPedido, codigoNFeEspecifico = null) => {
+    console.log(`[REMOVER] ${codigoPedido}${codigoNFeEspecifico ? ` -> ${codigoNFeEspecifico}` : ' (todas)'}`);
+
+    const associacoesAtuais = associacoes[codigoPedido];
+    let novasAssociacoes = { ...associacoes };
+
+    if (codigoNFeEspecifico && Array.isArray(associacoesAtuais)) {
+      const arrayAtualizado = associacoesAtuais.filter(cod => cod !== codigoNFeEspecifico);
+      if (arrayAtualizado.length > 0) {
+        novasAssociacoes[codigoPedido] = arrayAtualizado;
+      } else {
+        delete novasAssociacoes[codigoPedido];
+      }
+    } else {
+      delete novasAssociacoes[codigoPedido];
+    }
+
+    setAssociacoes(novasAssociacoes);
+
+    const nfesAtualizadas = nfes.map(nfe => {
+      const novasAssociacoesNFe = { ...nfe.associacoes };
+
+      if (codigoNFeEspecifico) {
+        if (novasAssociacoesNFe[codigoPedido] === codigoNFeEspecifico) {
+          delete novasAssociacoesNFe[codigoPedido];
+        }
+      } else {
+        delete novasAssociacoesNFe[codigoPedido];
+      }
+
+      return {
+        ...nfe,
+        associacoes: novasAssociacoesNFe
+      };
+    });
+
+    setNfes(nfesAtualizadas);
+
+    try {
+      for (const nfe of nfesAtualizadas) {
+        await axios.post(`${API_BASE}/salvar-associacoes`, {
+          numero_pedido: numeroPedido,
+          numero_nfe: nfe.numero_nfe,
+          associacoes: nfe.associacoes,
+          link_xml: nfe.link_xml
+        });
+      }
+
+      const chave = `${numeroPedido}_${codigoPedido}`;
+      const assocAtuais = associacoesManuais[chave];
+
+      if (codigoNFeEspecifico) {
+        await axios.post(`${API_BASE}/remover-associacao-manual`, {
+          numero_pedido: numeroPedido,
+          codigo_pedido: codigoPedido,
+          codigo_nfe: codigoNFeEspecifico
+        });
+
+        const arrayAtualizado = Array.isArray(assocAtuais) ? assocAtuais.filter(cod => cod !== codigoNFeEspecifico) : [];
+        setAssociacoesManuais(prev => {
+          if (arrayAtualizado.length > 0) {
+            return { ...prev, [chave]: arrayAtualizado };
+          } else {
+            const novo = { ...prev };
+            delete novo[chave];
+            return novo;
+          }
+        });
+      } else {
+        await axios.post(`${API_BASE}/remover-associacao-manual`, {
+          numero_pedido: numeroPedido,
+          codigo_pedido: codigoPedido
+        });
+
+        setAssociacoesManuais(prev => {
+          const novo = { ...prev };
+          delete novo[chave];
+          return novo;
+        });
+      }
+
+      const qtdRestante = novasAssociacoes[codigoPedido]?.length || 0;
+      console.log(`Associação removida (restantes: ${qtdRestante})`);
+      setSuccess(`Associação removida! ${qtdRestante > 0 ? `Restam ${qtdRestante}` : 'Nenhuma restante'}`);
+    } catch (error) {
+      console.error('Erro ao salvar após remover:', error.message);
+      setError('Associação removida localmente, mas não foi possível salvar no banco');
+    }
+  };
+
+  const excluirNFe = async (numeroNFe) => {
+    console.log('[EXCLUSAO] Iniciando exclusão da NFe:', numeroNFe);
+    console.log('[EXCLUSAO] Usuário logado:', usuarioLogado);
+    console.log('[EXCLUSAO] Pedido atual:', numeroPedido);
+
+    if (!usuarioLogado) {
+      const msg = 'Usuário não está logado. Recarregue a página.';
+      console.error('[EXCLUSAO] ' + msg);
+      setError(msg);
+      return;
+    }
+
+    if (usuarioLogado.tipo !== 'admin') {
+      const msg = `Apenas administradores podem excluir NFes. Seu tipo: ${usuarioLogado.tipo}`;
+      console.error('[EXCLUSAO] ' + msg);
+      setError(msg);
+      return;
+    }
+
+    if (!numeroPedido) {
+      const msg = 'Número do pedido não está definido';
+      console.error('[EXCLUSAO] ' + msg);
+      setError(msg);
+      return;
+    }
+
+    if (!confirm(`Tem certeza que deseja excluir a NFe ${numeroNFe}?\n\nEsta ação não pode ser desfeita!`)) {
+      console.log('[EXCLUSAO] Cancelado pelo usuário');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      console.log('[EXCLUSAO] Enviando requisição para:', `${API_BASE}/excluir-nfe`);
+      console.log('[EXCLUSAO] Dados:', { numero_pedido: numeroPedido, numero_nfe: numeroNFe });
+
+      const response = await axios.post(`${API_BASE}/excluir-nfe`, {
+        numero_pedido: numeroPedido,
+        numero_nfe: numeroNFe
+      });
+
+      console.log('[EXCLUSAO] Resposta recebida:', response.data);
+
+      if (response.data.success) {
+        const nfesAtualizadas = nfes.filter(nfe => nfe.numero_nfe !== numeroNFe);
+        setNfes(nfesAtualizadas);
+
+        const novasAssociacoes = { ...associacoes };
+        Object.keys(novasAssociacoes).forEach(key => {
+          const nfeAssociada = nfes.find(nfe => nfe.numero_nfe === numeroNFe);
+          if (nfeAssociada?.associacoes[key]) {
+            delete novasAssociacoes[key];
+          }
+        });
+        setAssociacoes(novasAssociacoes);
+
+        setSuccess(`NFe ${numeroNFe} excluída com sucesso`);
+      }
+    } catch (error) {
+      console.error('[EXCLUSAO] Erro completo:', error);
+      const errorMsg = error.response?.data?.error || error.message || 'Erro ao excluir NFe';
+      setError(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const carregarConversoes = async () => {
+    try {
+      console.log('[CONVERSOES] Carregando conversões do backend...');
+      const response = await axios.get(`${API_BASE}/listar-conversoes`);
+      if (response.data.success) {
+        const conversoesCarregadas = response.data.conversoes || {};
+        setConversoes(conversoesCarregadas);
+        console.log('[CONVERSOES] Carregadas:', Object.keys(conversoesCarregadas).length, 'produtos');
+      }
+    } catch (error) {
+      console.error('[CONVERSOES] Erro ao carregar:', error.message);
+    }
+  };
+
+  const salvarConversao = async (codigoProduto, unidadePedido, unidadeNFe, fator) => {
+    console.log('[SALVAR CONVERSAO] Iniciando salvamento...');
+    console.log('[SALVAR CONVERSAO] Parâmetros:', { codigoProduto, unidadePedido, unidadeNFe, fator });
+    try {
+      const payload = {
+        codigo_produto: codigoProduto,
+        unidade_pedido: unidadePedido,
+        unidade_nfe: unidadeNFe,
+        fator: parseFloat(fator)
+      };
+
+      const response = await axios.post(`${API_BASE}/salvar-conversao`, payload);
+
+      if (response.data.success) {
+        await carregarConversoes();
+        setSuccess(`Conversão salva: 1 ${unidadeNFe} = ${fator} ${unidadePedido}`);
+        setConfigurandoConversao(null);
+        console.log('[CONVERSOES] Salva com sucesso');
+      }
+    } catch (error) {
+      console.error('[CONVERSOES] Erro ao salvar:', error);
+      setError(error.response?.data?.error || 'Erro ao salvar conversão');
+    }
+  };
+
+  const obterFatorConversao = (codigoProduto, unidadePedido, unidadeNFe) => {
+    if (!conversoes[codigoProduto]) {
+      return null;
+    }
+
+    const chave = `${unidadePedido}_${unidadeNFe}`;
+    const fator = conversoes[codigoProduto][chave]?.fator || null;
+    return fator;
+  };
+
+  const carregarConferencias = async () => {
+    if (!numeroPedido) return;
+
+    try {
+      const response = await axios.get(`${API_BASE}/listar-conferencias`);
+      if (response.data.success) {
+        const conferenciasCarregadas = response.data.conferencias || [];
+
+        const conferenciasMap = {};
+        conferenciasCarregadas.forEach(conf => {
+          conf.itens?.forEach(item => {
+            const chave = `${conf.numero_pedido}_${conf.numero_nfe}_${item.codigo_nfe}`;
+            conferenciasMap[chave] = item.quantidade_fisica;
+          });
+        });
+
+        setConferencias(conferenciasMap);
+      }
+    } catch (error) {
+      console.error('[CONFERENCIAS] Erro ao carregar:', error.message);
+    }
+  };
+
+  const salvarConferenciaFisica = async (numeroNFe, codigoNFe, quantidadeNFe, quantidadeFisica) => {
+    try {
+      const response = await axios.post(`${API_BASE}/salvar-conferencia`, {
+        numero_pedido: numeroPedido,
+        numero_nfe: numeroNFe,
+        codigo_nfe: codigoNFe,
+        quantidade_nfe: quantidadeNFe,
+        quantidade_fisica: parseFloat(quantidadeFisica),
+        conferido_por: usuarioLogado
+      });
+
+      if (response.data.success) {
+        await carregarConferencias();
+        setSuccess(`Conferência salva: ${quantidadeFisica} unidades contadas`);
+      }
+    } catch (error) {
+      console.error('[CONFERENCIAS] Erro ao salvar:', error.message);
+      setError(error.response?.data?.error || 'Erro ao salvar conferência');
+    }
+  };
+
+  const abrirModalContagem = (chave, codigo, descricao, qtdEsperada, unidade, codigoPedido = null, descricaoPedido = null) => {
+    setItemSelecionadoIdx(chave);
+    setInfoModal({
+      codigo,
+      descricao,
+      qtdEsperada,
+      unidade,
+      codigoPedido,
+      descricaoPedido
+    });
+    setModalContagemAberto(true);
+    setNovaQuantidadeContagem('');
+  };
+
+  const fecharModalContagem = async () => {
+    if (itemSelecionadoIdx && dadosConferencia[itemSelecionadoIdx]) {
+      const total = dadosConferencia[itemSelecionadoIdx].totalContado;
+      const [numeroPed, numeroNFe, codigoNFe] = itemSelecionadoIdx.split('_');
+
+      await salvarConferenciaFisica(numeroNFe, codigoNFe, 0, total);
+      await salvarContagensDetalhadas();
+    }
+    setModalContagemAberto(false);
+    setItemSelecionadoIdx(null);
+    setInfoModal(null);
+    setNovaQuantidadeContagem('');
+  };
+
+  const adicionarContagem = () => {
+    if (!novaQuantidadeContagem || parseFloat(novaQuantidadeContagem) <= 0) {
+      alert('Digite uma quantidade válida');
+      return;
+    }
+
+    const entradas = dadosConferencia[itemSelecionadoIdx]?.entradas || [];
+    const novaEntrada = {
+      quantidade: parseFloat(novaQuantidadeContagem),
+      data: new Date().toLocaleString('pt-BR')
+    };
+
+    const novasEntradas = [...entradas, novaEntrada];
+    const totalContado = novasEntradas.reduce((sum, e) => sum + e.quantidade, 0);
+
+    setDadosConferencia({
+      ...dadosConferencia,
+      [itemSelecionadoIdx]: {
+        ...dadosConferencia[itemSelecionadoIdx],
+        entradas: novasEntradas,
+        totalContado: totalContado
+      }
+    });
+
+    setNovaQuantidadeContagem('');
+  };
+
+  const removerContagem = (idxEntrada) => {
+    const entradas = dadosConferencia[itemSelecionadoIdx]?.entradas || [];
+    const novasEntradas = entradas.filter((_, i) => i !== idxEntrada);
+    const totalContado = novasEntradas.reduce((sum, e) => sum + e.quantidade, 0);
+
+    setDadosConferencia({
+      ...dadosConferencia,
+      [itemSelecionadoIdx]: {
+        ...dadosConferencia[itemSelecionadoIdx],
+        entradas: novasEntradas,
+        totalContado: totalContado
+      }
+    });
+  };
+
+  const obterQuantidadeFisica = (numeroNFe, codigoNFe) => {
+    const chave = `${numeroPedido}_${numeroNFe}_${codigoNFe}`;
+    return conferencias[chave] !== undefined ? conferencias[chave] : null;
+  };
+
+  const carregarAssociacoesManuais = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/listar-associacoes-manuais`);
+      if (response.data.success) {
+        const associacoesCarregadas = response.data.associacoes || {};
+        setAssociacoesManuais(associacoesCarregadas);
+
+        if (numeroPedido && Object.keys(associacoesCarregadas).length > 0) {
+          const novasAssociacoes = {};
+          Object.entries(associacoesCarregadas).forEach(([chave, codigoOuArray]) => {
+            const [numPedido, codigoPedido] = chave.split('_');
+            if (numPedido === numeroPedido) {
+              novasAssociacoes[codigoPedido] = Array.isArray(codigoOuArray)
+                ? codigoOuArray
+                : [codigoOuArray];
+            }
+          });
+
+          if (Object.keys(novasAssociacoes).length > 0) {
+            setAssociacoes(prev => ({ ...prev, ...novasAssociacoes }));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[ASSOCIACOES MANUAIS] Erro ao carregar:', error.message);
+    }
+  };
+
+  const imprimirEtiquetas = async () => {
+    const historico = dadosConferencia[itemSelecionadoIdx];
+    if (!historico || !historico.entradas || historico.entradas.length === 0) {
+      alert('Nenhuma contagem para imprimir!');
+      return;
+    }
+
+    const nfeAtual = nfes.find(nfe =>
+      nfe.itens.some(item => item.codigo === infoModal.codigo)
+    );
+    const numeroNFe = nfeAtual ? nfeAtual.numero_nfe : 'N/A';
+
+    const codigoPedido = infoModal.codigoPedido || infoModal.codigo;
+    const descricaoPedido = infoModal.descricaoPedido || infoModal.descricao;
+
+    let localEstoque = '___________________';
+    try {
+      const codigoParaBusca = codigosNumericos[codigoPedido] || codigoPedido;
+
+      const response = await axios.post(`${API_BASE}/buscar-local-estoque`, {
+        codigo_produto: codigoParaBusca
+      });
+
+      if (response.data.success && response.data.local) {
+        localEstoque = response.data.local;
+      }
+    } catch (error) {
+      console.error('[IMPRESSAO] Erro ao buscar local:', error.message);
+    }
+
+    const etiquetasHTML = historico.entradas.map((contagem, idx) => `
+      <div class="etiqueta">
+        <div class="lado-esquerdo">
+          <div class="codigo-pedido">${codigoPedido}</div>
+          <div class="descricao-pedido">${descricaoPedido}</div>
+          <div class="info-linha">
+            <span class="label">NFe:</span>
+            <span class="valor">${numeroNFe}</span>
+            <span style="margin-left:2mm;" class="label">Local:</span>
+            <span class="valor">${localEstoque}</span>
+          </div>
+          <div class="info-linha">
+            <span class="label">Data:</span>
+            <span class="valor">${new Date().toLocaleDateString('pt-BR')}</span>
+          </div>
+        </div>
+        <div class="quantidade-box">
+          <div class="qtd-label">QTD</div>
+          <div class="qtd-valor">${contagem.quantidade}</div>
+        </div>
+      </div>
+    `).join('');
+
+    const janelaImpressao = window.open('', '_blank');
+    janelaImpressao.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Etiquetas - ${codigoPedido}</title>
+        <style>
+          @page { size: 87mm 28mm; margin: 0; }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: Arial, sans-serif; background: white; }
+          .etiqueta {
+            width: 87mm; height: 28mm; padding: 2mm 3mm; background: white;
+            display: flex; align-items: center; gap: 2mm; border: 2px solid #000;
+            page-break-after: always;
+          }
+          .etiqueta:last-child { page-break-after: auto; }
+          .lado-esquerdo { flex: 1; min-width: 0; overflow: hidden; }
+          .codigo-pedido {
+            font-size: 13pt; font-weight: bold; color: #000;
+            border-bottom: 2px solid #000; padding-bottom: 1mm; margin-bottom: 1.5mm;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          }
+          .descricao-pedido {
+            font-size: 9pt; font-weight: bold; margin-bottom: 1.5mm;
+            line-height: 1.2; max-height: 7mm; overflow: hidden;
+          }
+          .info-linha { font-size: 9pt; display: flex; gap: 1.5mm; line-height: 1.3; }
+          .info-linha + .info-linha { margin-top: 0.5mm; }
+          .label { font-weight: bold; }
+          .valor { font-weight: bold; }
+          .quantidade-box {
+            border: 3px solid #000; padding: 1.5mm 3mm; text-align: center;
+            min-width: 18mm; background: white; flex-shrink: 0;
+          }
+          .qtd-label { font-size: 7pt; font-weight: bold; }
+          .qtd-valor { font-size: 18pt; font-weight: bold; line-height: 1; }
+          @media print {
+            body { margin: 0; padding: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        ${etiquetasHTML}
+      </body>
+      </html>
+    `);
+
+    janelaImpressao.document.close();
+    setTimeout(() => {
+      janelaImpressao.print();
+    }, 250);
+  };
+
+  const carregarContagensDetalhadas = async (numPedido, numNFe) => {
+    try {
+      const response = await axios.post(`${API_BASE}/carregar-contagens-detalhadas`, {
+        numero_pedido: numPedido,
+        numero_nfe: numNFe
+      });
+
+      if (response.data.success && response.data.encontrado) {
+        const contagensCarregadas = response.data.contagens || {};
+        setDadosConferencia(prev => ({ ...prev, ...contagensCarregadas }));
+      }
+    } catch (error) {
+      console.error('[CONTAGENS DETALHADAS] Erro ao carregar:', error.message);
+    }
+  };
+
+  const salvarContagensDetalhadas = async () => {
+    try {
+      if (!numeroPedido || nfes.length === 0) return;
+
+      for (const nfe of nfes) {
+        const contagensNFe = {};
+        Object.entries(dadosConferencia).forEach(([chave, dados]) => {
+          if (chave.startsWith(`${numeroPedido}_${nfe.numero_nfe}_`)) {
+            contagensNFe[chave] = dados;
+          }
+        });
+
+        if (Object.keys(contagensNFe).length > 0) {
+          await axios.post(`${API_BASE}/salvar-contagens-detalhadas`, {
+            numero_pedido: numeroPedido,
+            numero_nfe: nfe.numero_nfe,
+            contagens: contagensNFe,
+            usuario: usuarioLogado?.nome || 'Sistema'
+          });
+        }
+      }
+    } catch (error) {
+      console.error('[CONTAGENS DETALHADAS] Erro ao salvar:', error.message);
+    }
+  };
+
+  const carregarListaPedidos = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/listar-pedidos`);
+      if (response.data.success) {
+        setListaPedidos(response.data.pedidos || []);
+      }
+    } catch (error) {
+      console.error('[LISTA PEDIDOS] Erro ao carregar:', error.message);
+    }
+  };
+
+  const selecionarPedido = async (numeroPed) => {
+    setAssociacoes({});
+
+    try {
+      const response = await axios.get(`${API_BASE}/listar-associacoes-manuais`);
+      if (response.data.success) {
+        const associacoesCarregadas = response.data.associacoes || {};
+        setAssociacoesManuais(associacoesCarregadas);
+      }
+    } catch (error) {
+      console.error('[SELECIONAR PEDIDO] Erro ao recarregar associações:', error.message);
+      setAssociacoesManuais(prev => {
+        const novo = { ...prev };
+        Object.keys(novo).forEach(chave => {
+          if (chave.startsWith(`${numeroPed}_`)) {
+            delete novo[chave];
+          }
+        });
+        return novo;
+      });
+    }
+
+    setNumeroPedido(numeroPed);
+    setTelaAtual('conferencia');
+    buscarDados(numeroPed);
+  };
+
+  const voltarParaLista = () => {
+    const pedidoAtual = numeroPedido;
+
+    setTelaAtual('lista');
+    setNumeroPedido('');
+    setPedidoData(null);
+    setNfes([]);
+    setAssociacoes({});
+    setCodigosNumericos({});
+    setError('');
+    setSuccess('');
+
+    if (pedidoAtual) {
+      setAssociacoesManuais(prev => {
+        const novo = { ...prev };
+        Object.keys(novo).forEach(chave => {
+          if (chave.startsWith(`${pedidoAtual}_`)) {
+            delete novo[chave];
+          }
+        });
+        return novo;
+      });
+    }
+
+    carregarListaPedidos();
+  };
+
+  const concluirRecebimento = async () => {
+    if (!numeroPedido) {
+      alert('Nenhum pedido carregado');
+      return;
+    }
+
+    const confirmar = window.confirm(
+      `Deseja realmente concluir o recebimento do pedido ${numeroPedido}?\n\nApós concluir, o pedido será removido da lista de trabalho.`
+    );
+
+    if (!confirmar) return;
+
+    try {
+      setLoading(true);
+      const response = await axios.post(`${API_BASE}/concluir-pedido`, {
+        numero_pedido: numeroPedido,
+        usuario: usuarioLogado?.nome || 'Usuário'
+      });
+
+      if (response.data.success) {
+        setSuccess(`Pedido ${numeroPedido} concluído com sucesso!`);
+        await carregarListaPedidos();
+        setTimeout(() => {
+          voltarParaLista();
+        }, 1500);
+      }
+    } catch (error) {
+      setError(error.response?.data?.error || 'Erro ao concluir pedido');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const manterEmAndamento = async () => {
+    if (!numeroPedido) {
+      alert('Nenhum pedido carregado');
+      return;
+    }
+
+    const confirmar = window.confirm(
+      `Confirma que deseja manter o pedido ${numeroPedido} em andamento?\n\nO pedido continuará na lista de trabalho.`
+    );
+
+    if (!confirmar) return;
+
+    try {
+      setLoading(true);
+      const response = await axios.post(`${API_BASE}/reabrir-pedido`, {
+        numero_pedido: numeroPedido
+      });
+
+      if (response.data.success) {
+        setSuccess(`Pedido ${numeroPedido} mantido em andamento!`);
+        await carregarListaPedidos();
+        setTimeout(() => {
+          voltarParaLista();
+        }, 1500);
+      }
+    } catch (error) {
+      setError(error.response?.data?.error || 'Erro ao atualizar pedido');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const recusarNotaFiscal = async () => {
+    if (!numeroPedido) {
+      alert('Nenhum pedido carregado');
+      return;
+    }
+
+    const confirmar = window.confirm(
+      `ATENÇÃO!\n\nDeseja realmente RECUSAR a nota fiscal do pedido ${numeroPedido}?\n\nO pedido ficará marcado como "Recusado" na lista.`
+    );
+
+    if (!confirmar) return;
+
+    try {
+      setLoading(true);
+      const response = await axios.post(`${API_BASE}/recusar-pedido`, {
+        numero_pedido: numeroPedido,
+        usuario: usuarioLogado?.nome || 'Usuário'
+      });
+
+      if (response.data.success) {
+        setSuccess(`Pedido ${numeroPedido} recusado!`);
+        await carregarListaPedidos();
+        setTimeout(() => {
+          voltarParaLista();
+        }, 1500);
+      }
+    } catch (error) {
+      setError(error.response?.data?.error || 'Erro ao recusar pedido');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const excluirPedido = async (numeroPed, event) => {
+    event.stopPropagation();
+
+    const confirmar = window.confirm(
+      `ATENÇÃO!\n\nDeseja realmente EXCLUIR o pedido ${numeroPed}?\n\nEsta ação irá remover:\n- Todas as NFes associadas\n- Todas as conferências\n- Todas as contagens detalhadas\n- Todo o histórico\n\nEsta ação NÃO pode ser desfeita!`
+    );
+
+    if (!confirmar) return;
+
+    const confirmarNovamente = window.confirm(
+      `Confirme novamente: Excluir pedido ${numeroPed}?`
+    );
+
+    if (!confirmarNovamente) return;
+
+    try {
+      setLoading(true);
+      const response = await axios.post(`${API_BASE}/excluir-pedido`, {
+        numero_pedido: numeroPed
+      });
+
+      if (response.data.success) {
+        setSuccess(`Pedido ${numeroPed} excluído com sucesso!`);
+
+        setAssociacoesManuais(prev => {
+          const novo = { ...prev };
+          Object.keys(novo).forEach(chave => {
+            if (chave.startsWith(`${numeroPed}_`)) {
+              delete novo[chave];
+            }
+          });
+          return novo;
+        });
+
+        await carregarAssociacoesManuais();
+        await carregarListaPedidos();
+      }
+    } catch (error) {
+      setError(error.response?.data?.error || 'Erro ao excluir pedido');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Carrega conversões ao montar o componente
+  useEffect(() => {
+    if (autenticado) {
+      carregarConversoes();
+      carregarAssociacoesManuais();
+      carregarListaPedidos();
+    }
+  }, [autenticado]);
+
+  // Carrega conferências quando o pedido mudar
+  useEffect(() => {
+    if (autenticado && numeroPedido) {
+      carregarConferencias();
+    }
+  }, [autenticado, numeroPedido]);
+
+  // Reaplica associações manuais quando o pedido ou NFes mudam
+  useEffect(() => {
+    if (numeroPedido && Object.keys(associacoesManuais).length > 0) {
+      const novasAssociacoes = {};
+      Object.entries(associacoesManuais).forEach(([chave, codigoOuArray]) => {
+        const [numPedido, codigoPedido] = chave.split('_');
+        if (numPedido === numeroPedido) {
+          novasAssociacoes[codigoPedido] = Array.isArray(codigoOuArray)
+            ? codigoOuArray
+            : [codigoOuArray];
+        }
+      });
+
+      if (Object.keys(novasAssociacoes).length > 0) {
+        setAssociacoes(prev => ({ ...prev, ...novasAssociacoes }));
+      }
+    }
+  }, [numeroPedido, nfes, associacoesManuais]);
+
+  // Comparação pedido x NFes (agregação)
+  const comparacao = useMemo(() => {
+    if (!pedidoData?.produtos_consulta) {
+      return null;
+    }
+
+    const produtosPedido = pedidoData.produtos_consulta || [];
+    const resultado = [];
+    const nfeUsados = new Set();
+
+    const qtdPorCodigo = new Map();
+
+    nfes.forEach(nfe => {
+      nfe.itens.forEach(itemNFe => {
+        const codigo = itemNFe.codigo;
+        if (!qtdPorCodigo.has(codigo)) {
+          qtdPorCodigo.set(codigo, {
+            qtdTotal: 0,
+            nfes: [],
+            descricao: itemNFe.descricao,
+            unidade: itemNFe.unidade
+          });
+        }
+        const info = qtdPorCodigo.get(codigo);
+        info.qtdTotal += parseFloat(itemNFe.quantidade || 0);
+        info.nfes.push({
+          numero_nfe: nfe.numero_nfe,
+          qtd: parseFloat(itemNFe.quantidade || 0),
+          codigo_nfe: itemNFe.codigo
+        });
+      });
+    });
+
+    produtosPedido.forEach(itemPedido => {
+      const codigoPedido = itemPedido.cProduto;
+      const qtdPedido = parseFloat(itemPedido.nQtde || 0);
+      const qtdRecebida = parseFloat(itemPedido.nQtdeRec || 0);
+
+      const codigosAssociados = associacoes[codigoPedido];
+      let infoNFe = null;
+      let temAssociacaoManual = false;
+
+      if (codigosAssociados) {
+        if (Array.isArray(codigosAssociados) && codigosAssociados.length > 0) {
+          temAssociacaoManual = true;
+          const nfesAgregadas = [];
+          let qtdTotalAgregada = 0;
+          let descricaoAgregada = '';
+          let unidadeAgregada = '';
+
+          codigosAssociados.forEach(codigoAssoc => {
+            const infoAssoc = qtdPorCodigo.get(codigoAssoc);
+            if (infoAssoc) {
+              qtdTotalAgregada += infoAssoc.qtdTotal;
+              nfesAgregadas.push(...infoAssoc.nfes);
+              if (!descricaoAgregada) descricaoAgregada = infoAssoc.descricao;
+              if (!unidadeAgregada) unidadeAgregada = infoAssoc.unidade;
+            }
+          });
+
+          if (qtdTotalAgregada > 0) {
+            infoNFe = {
+              qtdTotal: qtdTotalAgregada,
+              nfes: nfesAgregadas,
+              descricao: descricaoAgregada,
+              unidade: unidadeAgregada
+            };
+          }
+        } else {
+          temAssociacaoManual = true;
+          infoNFe = qtdPorCodigo.get(codigosAssociados);
+        }
+      } else {
+        infoNFe = qtdPorCodigo.get(codigoPedido);
+
+        if (!infoNFe) {
+          for (const [codigoNFe, info] of qtdPorCodigo.entries()) {
+            if (codigosSaoSimilares(codigoPedido, codigoNFe)) {
+              infoNFe = info;
+              break;
+            }
+          }
+        }
+      }
+
+      const qtdNFeOriginal = infoNFe ? infoNFe.qtdTotal : 0;
+      let qtdNFe = qtdNFeOriginal;
+      let temDivergenciaUnidade = false;
+      let fatorConversao = null;
+      const unidadePedido = itemPedido.cUnidade;
+      const unidadeNFe = infoNFe?.unidade;
+
+      if (infoNFe && unidadePedido && unidadeNFe && unidadePedido !== unidadeNFe) {
+        temDivergenciaUnidade = true;
+        fatorConversao = obterFatorConversao(codigoPedido, unidadePedido, unidadeNFe);
+
+        if (fatorConversao) {
+          qtdNFe = qtdNFeOriginal * fatorConversao;
+        }
+      }
+
+      const totalRecebido = qtdRecebida + qtdNFe;
+      const faltando = qtdPedido - totalRecebido;
+      const percentual = qtdPedido > 0 ? (totalRecebido / qtdPedido) * 100 : 0;
+
+      let status = 'faltando';
+      if (totalRecebido >= qtdPedido - 0.01) {
+        if (totalRecebido <= qtdPedido + 0.01) {
+          status = 'confere';
+        } else {
+          status = 'excesso';
+        }
+      } else if (totalRecebido > 0) {
+        status = 'parcial';
+      }
+
+      if (infoNFe) {
+        infoNFe.nfes.forEach(n => nfeUsados.add(n.codigo_nfe));
+      }
+
+      resultado.push({
+        codigo: codigoPedido,
+        codigoNFe: infoNFe?.nfes[0]?.codigo_nfe || null,
+        descricao: itemPedido.cDescricao,
+        descricaoNFe: infoNFe?.descricao,
+        unidade: itemPedido.cUnidade,
+        unidadeNFe: infoNFe?.unidade,
+        qtdPedido,
+        qtdRecebida,
+        qtdNFeOriginal,
+        qtdNFe,
+        totalRecebido,
+        faltando,
+        percentual,
+        diferenca: totalRecebido - qtdPedido,
+        status,
+        noPedido: true,
+        noNFe: !!infoNFe,
+        associacaoManual: temAssociacaoManual,
+        codigosAssociados: codigosAssociados || null,
+        detalhesNFes: infoNFe?.nfes || [],
+        temDivergenciaUnidade,
+        fatorConversao,
+        precisaConfigurarConversao: temDivergenciaUnidade
+      });
+    });
+
+    qtdPorCodigo.forEach((info, codigo) => {
+      if (!nfeUsados.has(codigo)) {
+        resultado.push({
+          codigo: null,
+          codigoNFe: codigo,
+          descricao: null,
+          descricaoNFe: info.descricao,
+          unidade: info.unidade,
+          unidadeNFe: info.unidade,
+          qtdPedido: 0,
+          qtdRecebida: 0,
+          qtdNFe: info.qtdTotal,
+          qtdNFeOriginal: info.qtdTotal,
+          totalRecebido: info.qtdTotal,
+          faltando: -info.qtdTotal,
+          percentual: 0,
+          diferenca: info.qtdTotal,
+          status: 'a_mais',
+          noPedido: false,
+          noNFe: true,
+          associacaoManual: false,
+          detalhesNFes: info.nfes
+        });
+      }
+    });
+
+    return resultado;
+  }, [pedidoData, nfes, associacoes, conversoes]);
+
+  const resumo = useMemo(() => {
+    if (!comparacao) return null;
+
+    const confere = comparacao.filter(item => item.status === 'confere').length;
+    const parcial = comparacao.filter(item => item.status === 'parcial').length;
+    const faltando = comparacao.filter(item => item.status === 'faltando').length;
+    const excesso = comparacao.filter(item => item.status === 'excesso').length;
+    const aMais = comparacao.filter(item => item.status === 'a_mais').length;
+    const total = comparacao.length;
+
+    return { confere, parcial, faltando, excesso, aMais, total };
+  }, [comparacao]);
+
+  const itensNFeDisponiveis = useMemo(() => {
+    if (nfes.length === 0) return [];
+
+    const codigosUsados = new Set();
+
+    Object.values(associacoes).forEach(codigoOuArray => {
+      if (Array.isArray(codigoOuArray)) {
+        codigoOuArray.forEach(cod => codigosUsados.add(cod));
+      } else {
+        codigosUsados.add(codigoOuArray);
+      }
+    });
+
+    if (comparacao) {
+      comparacao.forEach(item => {
+        if (item.noPedido && item.noNFe) {
+          if (item.associacaoManual && item.codigosAssociados) {
+            if (Array.isArray(item.codigosAssociados)) {
+              item.codigosAssociados.forEach(cod => codigosUsados.add(cod));
+            } else {
+              codigosUsados.add(item.codigosAssociados);
+            }
+          } else if (!item.associacaoManual) {
+            codigosUsados.add(item.codigo);
+          }
+        }
+      });
+    }
+
+    const todosItens = [];
+    nfes.forEach(nfe => {
+      nfe.itens.forEach(item => {
+        if (!codigosUsados.has(item.codigo)) {
+          todosItens.push({
+            ...item,
+            nfe_numero: nfe.numero_nfe
+          });
+        }
+      });
+    });
+
+    return todosItens;
+  }, [nfes, associacoes, comparacao]);
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'confere':
+        return 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700';
+      case 'parcial':
+        return 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700';
+      case 'excesso':
+        return 'bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-700';
+      case 'faltando':
+        return 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700';
+      case 'a_mais':
+        return 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700';
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600';
+    }
+  };
+
+  const getStatusBorderColor = (status) => {
+    switch (status) {
+      case 'confere': return 'border-l-emerald-500';
+      case 'parcial': return 'border-l-blue-500';
+      case 'excesso': return 'border-l-orange-500';
+      case 'faltando': return 'border-l-red-500';
+      case 'a_mais': return 'border-l-amber-500';
+      default: return 'border-l-gray-400';
+    }
+  };
+
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'confere': return 'Completo';
+      case 'parcial': return 'Parcial';
+      case 'excesso': return 'Excesso';
+      case 'faltando': return 'Faltando';
+      case 'a_mais': return 'A mais';
+      default: return '-';
+    }
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'confere': return <CheckCircle className="w-3.5 h-3.5" />;
+      case 'parcial': return <Clock className="w-3.5 h-3.5" />;
+      case 'excesso': return <ArrowUpCircle className="w-3.5 h-3.5" />;
+      case 'faltando': return <AlertCircle className="w-3.5 h-3.5" />;
+      case 'a_mais': return <TrendingUp className="w-3.5 h-3.5" />;
+      default: return null;
+    }
+  };
+
+  // Função para abrir o modal DANFE
+  const abrirDanfe = async (nfe) => {
+    setLoadingDanfe(true);
+    setModalDanfe({ dados: null });
+    try {
+      const response = await axios.post(`${API_BASE}/xml-formatado`, {
+        link_xml: nfe.link_xml,
+        numero_nfe: nfe.numero_nfe
+      });
+      if (response.data.success) {
+        setModalDanfe({ dados: response.data.dados });
+      } else {
+        setModalDanfe(null);
+        setError('XML não encontrado no banco. Tente adicionar a NFe novamente.');
+      }
+    } catch (err) {
+      console.error('Erro ao carregar DANFE:', err);
+      setModalDanfe(null);
+      setError('Erro ao carregar dados da NFe: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setLoadingDanfe(false);
+    }
+  };
+
+  const formatarCNPJ = (cnpj) => {
+    if (!cnpj) return '-';
+    return cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+  };
+
+  const formatarMoeda = (valor) => {
+    if (!valor) return 'R$ 0,00';
+    return parseFloat(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
+  // Tela de não autenticado
+  if (!autenticado) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-5">
+        <div className="max-w-lg w-full bg-white dark:bg-gray-800 rounded-xl shadow-lg p-10 text-center animate-fade-in">
+          <div className="mx-auto w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-6">
+            <Lock className="w-8 h-8 text-red-500" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Acesso Restrito</h2>
+          <p className="text-gray-500 dark:text-gray-400 mb-6">
+            Por favor, faça login através do Menu Principal para acessar este programa.
+          </p>
+          <button
+            className="px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg font-semibold text-sm shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+            onClick={() => window.location.href = 'http://192.168.1.70:3000'}
+          >
+            Ir para Menu Principal
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-5 md:p-8 transition-colors duration-300">
+      {/* Header */}
+      <header className="max-w-[1400px] mx-auto mb-6 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-4">
+          <a
+            href={`http://${window.location.hostname}:3000`}
+            title="Voltar ao Menu Principal"
+            className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary-600 to-primary-700 flex items-center justify-center text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
+          >
+            <Package className="w-7 h-7" />
+          </a>
+          <div className="flex flex-col gap-1">
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Recebimento NFe - Omie</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Comparação automática entre Pedido e NFe</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setDarkMode(!darkMode)}
+            className="w-10 h-10 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors shadow-sm"
+            title={darkMode ? 'Modo claro' : 'Modo escuro'}
+          >
+            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
+          {telaAtual === 'conferencia' && (
+            <button
+              onClick={voltarParaLista}
+              className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-semibold text-sm transition-colors flex items-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Voltar para Lista
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* TELA DE LISTA DE PEDIDOS */}
+      {telaAtual === 'lista' && (
+        <div className="animate-fade-in">
+          {/* Card para iniciar novo recebimento */}
+          <div className="max-w-[1400px] mx-auto mb-6 bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white shadow-lg shadow-primary-500/30">
+                <Plus className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Novo Recebimento</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Inicie a conferência de um novo pedido</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 items-end">
+              <div className="flex-1">
+                <label className="block text-sm font-semibold text-gray-600 dark:text-gray-300 mb-1.5">
+                  Número do Pedido
+                </label>
+                <div className="relative">
+                  <Hash className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={numeroPedido}
+                    onChange={(e) => setNumeroPedido(e.target.value)}
+                    placeholder="Ex: 26699"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && numeroPedido.trim()) {
+                        setTelaAtual('conferencia');
+                        setTimeout(() => buscarDados(), 100);
+                      }
+                    }}
+                    className="w-full h-12 pl-12 pr-4 border-2 border-gray-200 dark:border-gray-600 rounded-lg text-base font-medium bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <button
+                className={`h-12 px-6 rounded-lg text-base font-semibold flex items-center gap-2 whitespace-nowrap transition-all duration-200 ${
+                  numeroPedido.trim()
+                    ? 'bg-gradient-to-r from-primary-600 to-primary-700 text-white shadow-lg shadow-primary-600/30 hover:-translate-y-0.5 hover:shadow-xl'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
+                }`}
+                onClick={() => {
+                  if (numeroPedido.trim()) {
+                    setTelaAtual('conferencia');
+                    setTimeout(() => buscarDados(), 100);
+                  } else {
+                    alert('Digite o número do pedido');
+                  }
+                }}
+                disabled={!numeroPedido.trim()}
+              >
+                <Rocket className="w-5 h-5" />
+                Iniciar
+              </button>
+            </div>
+          </div>
+
+          {/* Card Pedidos Processados */}
+          <div className="max-w-[1400px] mx-auto bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-200 dark:border-gray-700">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <ClipboardList className="w-5 h-5 text-primary-600" />
+              Pedidos Processados
+            </h2>
+
+            <div className="flex gap-3 mb-5 flex-wrap">
+              {/* Filtro por status */}
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Filtrar por Status:
+                </label>
+                <select
+                  value={filtroStatus}
+                  onChange={(e) => setFiltroStatus(e.target.value)}
+                  className="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="todos">Todos os Ativos</option>
+                  <option value="em_andamento">Em Andamento</option>
+                  <option value="recusado">Recusados</option>
+                  <option value="concluido">Concluídos</option>
+                </select>
+              </div>
+
+              {/* Busca por número */}
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Buscar por Número:
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={buscaPedido}
+                    onChange={(e) => setBuscaPedido(e.target.value)}
+                    placeholder="Digite o número do pedido..."
+                    className="w-full h-10 pl-10 pr-3 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-end">
+                <button
+                  onClick={carregarListaPedidos}
+                  className="h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-sm transition-colors flex items-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Atualizar
+                </button>
+              </div>
+            </div>
+
+            {/* Tabela de pedidos */}
+            <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-gray-700 border-b-2 border-gray-200 dark:border-gray-600">
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Pedido</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Status</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">NFes</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Responsável</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Data</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {listaPedidos
+                    .filter(p => {
+                      if (filtroStatus === 'todos') {
+                        return p.status === 'em_andamento' || p.status === 'recusado';
+                      }
+                      return p.status === filtroStatus;
+                    })
+                    .filter(p => buscaPedido === '' || p.numero_pedido.includes(buscaPedido))
+                    .map(pedido => (
+                      <tr
+                        key={pedido.numero_pedido}
+                        className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                        onClick={() => selecionarPedido(pedido.numero_pedido)}
+                      >
+                        <td className="px-4 py-4 font-semibold text-gray-900 dark:text-white">
+                          #{pedido.numero_pedido}
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            pedido.status === 'concluido'
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                              : pedido.status === 'recusado'
+                                ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                                : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                          }`}>
+                            {pedido.status === 'concluido' ? 'Concluído' :
+                             pedido.status === 'recusado' ? 'Recusado' :
+                             'Em Andamento'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-center text-gray-500 dark:text-gray-400">
+                          {pedido.qtd_nfes}
+                        </td>
+                        <td className="px-4 py-4 text-gray-500 dark:text-gray-400">
+                          {pedido.concluido_por || pedido.recusado_por || '-'}
+                        </td>
+                        <td className="px-4 py-4 text-gray-500 dark:text-gray-400 text-xs">
+                          {pedido.concluido_em
+                            ? new Date(pedido.concluido_em).toLocaleString('pt-BR')
+                            : pedido.recusado_em
+                              ? new Date(pedido.recusado_em).toLocaleString('pt-BR')
+                              : pedido.atualizado_em
+                                ? new Date(pedido.atualizado_em).toLocaleString('pt-BR')
+                                : '-'}
+                        </td>
+                        <td className="px-4 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex gap-2 justify-center">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                selecionarPedido(pedido.numero_pedido);
+                              }}
+                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-semibold transition-colors"
+                            >
+                              Abrir
+                            </button>
+                            {usuarioLogado?.tipo === 'admin' && (
+                              <button
+                                onClick={(e) => excluirPedido(pedido.numero_pedido, e)}
+                                className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-md text-xs font-semibold transition-colors"
+                                title="Excluir pedido (Admin)"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+
+              {listaPedidos
+                .filter(p => {
+                  if (filtroStatus === 'todos') {
+                    return p.status === 'em_andamento' || p.status === 'recusado';
+                  }
+                  return p.status === filtroStatus;
+                })
+                .filter(p => buscaPedido === '' || p.numero_pedido.includes(buscaPedido))
+                .length === 0 && (
+                <div className="text-center py-16 text-gray-500 dark:text-gray-400">
+                  <MailOpen className="w-12 h-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
+                  <p className="text-base font-medium">Nenhum pedido encontrado</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TELA DE CONFERÊNCIA */}
+      {telaAtual === 'conferencia' && (
+        <div className="animate-fade-in">
+          {/* Buscar Pedido */}
+          <div className="max-w-[1400px] mx-auto mb-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+            <label className="block text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2">Número do Pedido:</label>
+            <div className="flex gap-3 items-center">
+              <div className="flex-1 relative">
+                <Hash className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={numeroPedido}
+                  onChange={(e) => setNumeroPedido(e.target.value)}
+                  className="w-full h-12 pl-12 pr-4 border-2 border-gray-200 dark:border-gray-600 rounded-lg text-sm font-medium bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                  placeholder="Digite o número do pedido (ex: 1113)"
+                  onKeyPress={(e) => e.key === 'Enter' && buscarDados()}
+                />
+              </div>
+              <button
+                className={`h-12 px-5 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg font-semibold text-sm shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2 whitespace-nowrap ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                onClick={() => buscarDados()}
+                disabled={loading}
+              >
+                {loading ? <span className="spinner"></span> : <Search className="w-4 h-4" />}
+                {loading ? 'Buscando...' : 'Buscar Pedido'}
+              </button>
+              {pedidoData && (
+                <button
+                  className={`h-12 px-5 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-lg font-semibold text-sm shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2 whitespace-nowrap ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  onClick={() => buscarDados(null, true)}
+                  disabled={loading}
+                  title="Forçar atualização do pedido via API Omie"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                  Atualizar
+                </button>
+              )}
+            </div>
+
+            {/* Indicador de origem dos dados */}
+            {pedidoData && origemPedido && (
+              <div className={`mt-3 flex items-center gap-2 text-xs font-medium ${
+                origemPedido === 'cache'
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-emerald-600 dark:text-emerald-400'
+              }`}>
+                {origemPedido === 'cache' ? (
+                  <>
+                    <Clock className="w-3.5 h-3.5" />
+                    Dados carregados do cache local
+                    {pedidoSalvoEm && (
+                      <span className="text-gray-400 dark:text-gray-500">
+                        (salvo em {new Date(pedidoSalvoEm).toLocaleString('pt-BR')})
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    Dados atualizados da API Omie
+                  </>
+                )}
+              </div>
+            )}
+
+            {pedidoData && nfes.length === 0 && (
+              <div className="mt-4">
+                <button
+                  className="w-full h-12 bg-gradient-to-r from-primary-500 to-primary-700 text-white rounded-lg font-semibold text-sm shadow-lg hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
+                  onClick={() => setAdicionandoNFe(true)}
+                >
+                  <Plus className="w-5 h-5" />
+                  Adicionar NFe para este pedido
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Alerts */}
+          {error && (
+            <div className="max-w-[1400px] mx-auto mb-4 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 rounded-r-lg text-sm text-red-700 dark:text-red-300 animate-fade-in">
+              <strong>Erro:</strong> {error}
+            </div>
+          )}
+
+          {success && (
+            <div className="max-w-[1400px] mx-auto mb-4 bg-emerald-50 dark:bg-emerald-900/20 border-l-4 border-emerald-500 p-4 rounded-r-lg text-sm text-emerald-700 dark:text-emerald-300 animate-fade-in">
+              {success}
+            </div>
+          )}
+
+          {/* Abas de navegação */}
+          {pedidoData && (
+            <div className="max-w-[1400px] mx-auto mb-4">
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-1.5 flex gap-1.5">
+                <button
+                  onClick={() => setAbaDetalhes('recebimento')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-lg text-sm font-bold transition-all ${
+                    abaDetalhes === 'recebimento'
+                      ? 'bg-gradient-to-r from-primary-600 to-primary-700 text-white shadow-lg'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <Package className="w-4 h-4" />
+                  Recebimento NFe
+                </button>
+                <button
+                  onClick={() => setAbaDetalhes('conferencia_fisica')}
+                  className={`flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-lg text-sm font-bold transition-all ${
+                    abaDetalhes === 'conferencia_fisica'
+                      ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-lg'
+                      : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  <ClipboardList className="w-4 h-4" />
+                  Conferência Física
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ===== ABA: RECEBIMENTO NFe ===== */}
+          {abaDetalhes === 'recebimento' && <>
+
+          {/* Histórico de NFes */}
+          {nfes.length > 0 && (
+            <div className="max-w-[1400px] mx-auto mb-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                <Package className="w-5 h-5 text-primary-600" />
+                NFes Processadas ({nfes.length})
+              </h2>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-3 mt-3">
+                {nfes.map((nfe, idx) => (
+                  <div key={idx} className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg border-2 border-gray-200 dark:border-gray-600">
+                    <div className="font-bold text-gray-900 dark:text-white mb-1">
+                      NFe {nfe.numero_nfe}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+                      {nfe.itens.length} item(ns) | {new Date(nfe.data_processamento).toLocaleString('pt-BR')}
+                    </div>
+                    <button
+                      onClick={() => abrirDanfe(nfe)}
+                      className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
+                    >
+                      <FileText className="w-3 h-3 flex-shrink-0" />
+                      Ver Nota Fiscal
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                className="w-full mt-3 h-10 bg-gradient-to-r from-primary-500 to-primary-700 text-white rounded-lg font-semibold text-sm shadow-lg hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
+                onClick={() => setAdicionandoNFe(true)}
+              >
+                <Plus className="w-4 h-4" />
+                Adicionar outra NFe
+              </button>
+            </div>
+          )}
+
+          {/* Resumo de Divergências */}
+          {resumo && (
+            <div className="max-w-[1400px] mx-auto mb-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-primary-600" />
+                Resumo da Comparação
+              </h2>
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3">
+                <div className="bg-emerald-100 dark:bg-emerald-900/30 p-4 rounded-lg border-2 border-emerald-500">
+                  <div className="text-2xl font-bold text-emerald-800 dark:text-emerald-300">{resumo.confere}</div>
+                  <div className="text-xs text-emerald-700 dark:text-emerald-400 mt-1 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Completo</div>
+                </div>
+                <div className="bg-blue-100 dark:bg-blue-900/30 p-4 rounded-lg border-2 border-blue-500">
+                  <div className="text-2xl font-bold text-blue-800 dark:text-blue-300">{resumo.parcial}</div>
+                  <div className="text-xs text-blue-700 dark:text-blue-400 mt-1 flex items-center gap-1"><Clock className="w-3 h-3" /> Parcial</div>
+                </div>
+                <div className="bg-red-100 dark:bg-red-900/30 p-4 rounded-lg border-2 border-red-500">
+                  <div className="text-2xl font-bold text-red-800 dark:text-red-300">{resumo.faltando}</div>
+                  <div className="text-xs text-red-700 dark:text-red-400 mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Faltando</div>
+                </div>
+                <div className="bg-orange-100 dark:bg-orange-900/30 p-4 rounded-lg border-2 border-orange-500">
+                  <div className="text-2xl font-bold text-orange-800 dark:text-orange-300">{resumo.excesso}</div>
+                  <div className="text-xs text-orange-700 dark:text-orange-400 mt-1 flex items-center gap-1"><ArrowUpCircle className="w-3 h-3" /> Excesso</div>
+                </div>
+                <div className="bg-amber-100 dark:bg-amber-900/30 p-4 rounded-lg border-2 border-amber-500">
+                  <div className="text-2xl font-bold text-amber-800 dark:text-amber-300">{resumo.aMais}</div>
+                  <div className="text-xs text-amber-700 dark:text-amber-400 mt-1 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> A Mais</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tabelas por NFe */}
+          {nfes.length > 0 && nfes.map((nfe, nfeIdx) => (
+            <div key={nfeIdx} className="max-w-[1400px] mx-auto mb-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+              <div className="mb-4">
+                <div className="flex justify-between items-start mb-2">
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <Package className="w-5 h-5 text-primary-600" />
+                    NFe {nfe.numero_nfe}
+                  </h2>
+                  {usuarioLogado?.tipo === 'admin' && (
+                    <button
+                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                      onClick={() => excluirNFe(nfe.numero_nfe)}
+                      disabled={loading}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Excluir NFe
+                    </button>
+                  )}
+                </div>
+                {nfe.itens[0]?.fornecedor && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Fornecedor: <strong>{nfe.itens[0].fornecedor}</strong></p>
+                )}
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Processada em: {new Date(nfe.data_processamento).toLocaleString('pt-BR')}
+                </p>
+              </div>
+
+              <div className="overflow-x-auto mt-5 border border-gray-200 dark:border-gray-700 rounded-lg">
+                <table className="w-full border-collapse text-sm min-w-[1000px]">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-gray-700">
+                      <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[60px]">Item</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 min-w-[120px]">Código</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600">Descrição</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[80px]">Un.</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[120px]">Quantidade</th>
+                      <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[150px]">Status</th>
+                      <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[120px]">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {nfe.itens.map((item, idx) => {
+                      const itemComparacao = comparacao?.find(c =>
+                        c.detalhesNFes?.some(d => d.numero_nfe === nfe.numero_nfe && d.codigo_nfe === item.codigo)
+                      );
+                      const statusText = itemComparacao ? getStatusText(itemComparacao.status) : '-';
+                      const badgeClass = itemComparacao ? getStatusBadge(itemComparacao.status) : 'bg-gray-100 text-gray-600 border-gray-300';
+                      const borderClass = itemComparacao ? getStatusBorderColor(itemComparacao.status) : 'border-l-gray-400';
+
+                      return (
+                        <tr key={idx} className={`border-l-4 ${borderClass} ${idx % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-800/50'} hover:bg-blue-50 dark:hover:bg-gray-700/50 transition-colors`}>
+                          <td className="px-4 py-3.5 text-center font-bold text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">{idx + 1}</td>
+                          <td className="px-4 py-3.5 font-mono whitespace-nowrap text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-gray-700">
+                            {item.codigo}
+                          </td>
+                          <td className="px-4 py-3.5 font-semibold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 max-w-[400px] break-words">{decodeHtmlEntities(item.descricao)}</td>
+                          <td className="px-4 py-3.5 text-center text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">{item.unidade}</td>
+                          <td className="px-4 py-3.5 text-right font-mono text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-gray-700">
+                            {parseFloat(item.quantidade).toLocaleString('pt-BR')}
+                          </td>
+                          <td className="px-4 py-3.5 text-center border-b border-gray-100 dark:border-gray-700">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border ${badgeClass}`}>
+                              {itemComparacao && getStatusIcon(itemComparacao.status)}
+                              {statusText}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-center border-b border-gray-100 dark:border-gray-700">
+                            <button
+                              className={`px-2.5 py-1 rounded text-xs font-semibold text-white transition-colors ${
+                                (itemComparacao?.fatorConversao || conversoes[item.codigo])
+                                  ? 'bg-sky-500 hover:bg-sky-600'
+                                  : 'bg-amber-500 hover:bg-amber-600'
+                              }`}
+                              onClick={() => {
+                                if (itemComparacao) {
+                                  setConfigurandoConversao(itemComparacao);
+                                } else {
+                                  setConfigurandoConversao({
+                                    codigoPedido: item.codigo,
+                                    codigoNFe: item.codigo,
+                                    unidadeNFe: item.unidade,
+                                    unidadePedido: '',
+                                    qtdNFe: parseFloat(item.quantidade),
+                                    semAssociacao: true,
+                                    numeroNFe: nfe.numero_nfe
+                                  });
+                                }
+                              }}
+                            >
+                              {(itemComparacao?.fatorConversao || conversoes[item.codigo])
+                                ? <><CheckCircle className="w-3 h-3 inline mr-1" />Conversão</>
+                                : <><Settings className="w-3 h-3 inline mr-1" />Converter</>
+                              }
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+
+          {/* Tabela do Pedido */}
+          {pedidoData && pedidoData.produtos_consulta && (
+            <div className="max-w-[1400px] mx-auto mb-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-primary-600" />
+                PEDIDO {pedidoData.cabecalho_consulta?.cNumero || 'N/A'}
+              </h2>
+
+              <div className="overflow-x-auto mt-5 border border-gray-200 dark:border-gray-700 rounded-lg">
+                <table className="w-full border-collapse text-sm min-w-[1200px]">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-gray-700">
+                      <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[60px]">Item</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 min-w-[120px]">Código</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600">Descrição</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[80px]">Un.</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[110px]">Qtd Pedido</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[110px]">Já Recebido</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[110px]">Qtd NFe(s)</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[140px]">Total Recebido</th>
+                      <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[150px]">Status</th>
+                      <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[120px]">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {comparacao && comparacao.filter(item => item.noPedido).map((item, idx) => {
+                      const badgeClass = getStatusBadge(item.status);
+                      const borderClass = getStatusBorderColor(item.status);
+                      const temAssociacao = item.associacaoManual;
+
+                      return (
+                        <tr key={idx} className={`border-l-4 ${borderClass} ${idx % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-800/50'} hover:bg-blue-50 dark:hover:bg-gray-700/50 transition-colors`}>
+                          <td className="px-4 py-3.5 text-center font-bold text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">{idx + 1}</td>
+                          <td className="px-4 py-3.5 font-mono whitespace-nowrap text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-gray-700">
+                            {item.codigo}
+                            {temAssociacao && <Link2 className="w-3 h-3 inline ml-1 text-primary-500" />}
+                          </td>
+                          <td className="px-4 py-3.5 font-semibold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 max-w-[400px] break-words">{decodeHtmlEntities(item.descricao)}</td>
+                          <td className="px-4 py-3.5 text-center text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
+                            {item.unidade}
+                            {item.temDivergenciaUnidade && (
+                              <div className={`text-[9px] mt-0.5 font-semibold ${item.fatorConversao ? 'text-emerald-600' : 'text-red-600'}`}>
+                                {item.fatorConversao ? `OK ${item.unidadeNFe}` : `! ${item.unidadeNFe}`}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3.5 text-right font-mono text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-gray-700">
+                            {item.qtdPedido.toLocaleString('pt-BR')}
+                          </td>
+                          <td className="px-4 py-3.5 text-right font-mono text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
+                            {item.qtdRecebida ? item.qtdRecebida.toLocaleString('pt-BR') : '0'}
+                          </td>
+                          <td className="px-4 py-3.5 text-right font-mono text-blue-600 dark:text-blue-400 font-semibold border-b border-gray-100 dark:border-gray-700">
+                            {item.qtdNFe ? item.qtdNFe.toLocaleString('pt-BR') : '0'}
+                            {item.fatorConversao && (
+                              <div className="text-[9px] text-emerald-600 dark:text-emerald-400 mt-0.5 font-medium leading-tight">
+                                ({item.qtdNFeOriginal.toLocaleString('pt-BR')} {item.unidadeNFe} x {item.fatorConversao})
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3.5 text-right border-b border-gray-100 dark:border-gray-700">
+                            <div className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                              {item.totalRecebido.toLocaleString('pt-BR')}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-0.5">
+                              {item.percentual.toFixed(1)}%
+                            </div>
+                          </td>
+                          <td className="px-4 py-3.5 text-center border-b border-gray-100 dark:border-gray-700">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border ${badgeClass}`}>
+                              {getStatusIcon(item.status)}
+                              {getStatusText(item.status)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-center border-b border-gray-100 dark:border-gray-700">
+                            <div className="flex flex-col gap-1 items-center">
+                              <button
+                                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold transition-colors flex items-center gap-1"
+                                onClick={() => setAssociandoItem(item)}
+                              >
+                                {temAssociacao ? <><Plus className="w-3 h-3" /> Adicionar</> : <><Link2 className="w-3 h-3" /> Associar</>}
+                              </button>
+
+                              {temAssociacao && item.codigosAssociados && (
+                                <div className="mt-1 flex flex-col gap-1">
+                                  {Array.isArray(item.codigosAssociados) ? (
+                                    item.codigosAssociados.map((codAssoc, aIdx) => (
+                                      <div key={aIdx} className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700 rounded text-[10px]">
+                                        <span className="text-emerald-700 dark:text-emerald-400 font-mono">
+                                          <Link2 className="w-2.5 h-2.5 inline" /> {codAssoc}
+                                        </span>
+                                        <button
+                                          className="ml-auto px-1 py-0 bg-red-500 text-white rounded text-[9px] hover:bg-red-600 transition-colors"
+                                          onClick={() => removerAssociacao(item.codigo, codAssoc)}
+                                        >
+                                          <X className="w-2.5 h-2.5" />
+                                        </button>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700 rounded text-[10px]">
+                                      <span className="text-emerald-700 dark:text-emerald-400 font-mono">
+                                        <Link2 className="w-2.5 h-2.5 inline" /> {item.codigosAssociados}
+                                      </span>
+                                      <button
+                                        className="ml-auto px-1 py-0 bg-red-500 text-white rounded text-[9px] hover:bg-red-600 transition-colors"
+                                        onClick={() => removerAssociacao(item.codigo)}
+                                      >
+                                        <X className="w-2.5 h-2.5" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Botões de Ação - Aba Recebimento */}
+          {pedidoData && nfes.length > 0 && (
+            <div className="max-w-[1400px] mx-auto mt-4 flex gap-3 justify-center flex-wrap">
+              <button
+                className={`flex-1 min-w-[200px] max-w-[350px] h-12 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg font-bold text-base shadow-lg hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                onClick={recusarNotaFiscal}
+                disabled={loading}
+              >
+                <X className="w-5 h-5" />
+                Recusar Nota Fiscal
+              </button>
+            </div>
+          )}
+
+          </>}
+
+          {/* ===== ABA: CONFERÊNCIA FÍSICA ===== */}
+          {abaDetalhes === 'conferencia_fisica' && <>
+
+          {/* Tabela de Conferência Física */}
+          {pedidoData && nfes.length > 0 && (
+            <div className="max-w-[1400px] mx-auto mb-4 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+              <h2 className="text-lg font-bold text-white mb-2 flex items-center gap-2 bg-gradient-to-r from-violet-500 to-purple-600 px-4 py-2.5 rounded-lg -mx-2 -mt-2">
+                <Package className="w-5 h-5" />
+                CONFERÊNCIA FÍSICA - Qtd Contada vs Nota Fiscal
+              </h2>
+
+              <div className="overflow-x-auto mt-5 border border-gray-200 dark:border-gray-700 rounded-lg">
+                <table className="w-full border-collapse text-sm min-w-[1200px]">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-gray-700">
+                      <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[60px]">Item</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 min-w-[120px]">Código</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600">Descrição</th>
+                      <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[80px]">Un.</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[150px]">Qtd NFe / Esperado</th>
+                      <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[150px]">Qtd Física Contada</th>
+                      <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[120px]">Diferença</th>
+                      <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[120px]">Status</th>
+                      <th className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400 border-b-2 border-gray-200 dark:border-gray-600 w-[60px]"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {nfes.map(nfe =>
+                      nfe.itens.map((item, idx) => {
+                        const chaveConferencia = `${numeroPedido}_${nfe.numero_nfe}_${item.codigo}`;
+                        const qtdFisica = conferencias[chaveConferencia];
+                        const qtdNFe = parseFloat(item.quantidade);
+                        const temConferencia = qtdFisica !== undefined && qtdFisica !== null;
+
+                        const itemComparacao = comparacao?.find(c =>
+                          c.detalhesNFes?.some(d => d.numero_nfe === nfe.numero_nfe && d.codigo_nfe === item.codigo)
+                        );
+
+                        const estaAssociado = !!itemComparacao && itemComparacao.noPedido === true;
+
+                        let qtdFisicaConvertida = qtdFisica;
+                        let fatorConversao = null;
+                        let unidadePedido = item.unidade;
+                        let qtdEsperada = qtdNFe;
+
+                        if (itemComparacao) {
+                          fatorConversao = itemComparacao.fatorConversao;
+                          unidadePedido = itemComparacao.unidade;
+
+                          const detalheNFe = itemComparacao.detalhesNFes?.find(d => d.numero_nfe === nfe.numero_nfe && d.codigo_nfe === item.codigo);
+                          if (detalheNFe && fatorConversao) {
+                            qtdEsperada = detalheNFe.qtd * fatorConversao;
+                          } else if (detalheNFe) {
+                            qtdEsperada = detalheNFe.qtd;
+                          }
+
+                          qtdFisicaConvertida = qtdFisica;
+                        }
+
+                        const diferenca = temConferencia ? qtdFisicaConvertida - qtdEsperada : 0;
+
+                        let statusConf = 'pendente';
+                        let confBadgeClass = 'bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-700 dark:text-gray-400 dark:border-gray-600';
+                        let confBorderClass = 'border-l-gray-400';
+
+                        if (!estaAssociado) {
+                          statusConf = 'nao_associado';
+                          confBadgeClass = 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700';
+                          confBorderClass = 'border-l-yellow-400';
+                        } else if (temConferencia) {
+                          if (Math.abs(diferenca) < 0.01) {
+                            statusConf = 'confere';
+                            confBadgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700';
+                            confBorderClass = 'border-l-emerald-500';
+                          } else if (diferenca < 0) {
+                            statusConf = 'falta';
+                            confBadgeClass = 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700';
+                            confBorderClass = 'border-l-red-500';
+                          } else {
+                            statusConf = 'excesso';
+                            confBadgeClass = 'bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-700';
+                            confBorderClass = 'border-l-orange-500';
+                          }
+                        }
+
+                        return (
+                          <tr key={`${nfe.numero_nfe}_${idx}`} className={`border-l-4 ${confBorderClass} ${idx % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-800/50'} hover:bg-blue-50 dark:hover:bg-gray-700/50 transition-colors`}>
+                            <td className="px-4 py-3.5 text-center font-bold text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">{idx + 1}</td>
+                            <td className="px-4 py-3.5 font-mono whitespace-nowrap text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-gray-700">
+                              {item.codigo}
+                              <div className="text-[9px] text-gray-400 dark:text-gray-500 mt-0.5">
+                                NFe {nfe.numero_nfe}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3.5 font-semibold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 max-w-[400px] break-words">
+                              {decodeHtmlEntities(item.descricao)}
+                            </td>
+                            <td className="px-4 py-3.5 text-center text-gray-600 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
+                              {item.unidade}
+                              {fatorConversao && (
+                                <div className="text-[9px] text-emerald-600 dark:text-emerald-400 mt-0.5 font-semibold">
+                                  OK -&gt; {unidadePedido}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5 text-right font-mono font-semibold text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-gray-700">
+                              {estaAssociado ? (
+                                <>
+                                  <div>{qtdNFe.toLocaleString('pt-BR')} {item.unidade}</div>
+                                  {fatorConversao && (
+                                    <div className="text-[10px] text-gray-400 mt-0.5 font-medium">
+                                      Esperado: {qtdEsperada.toLocaleString('pt-BR')} {unidadePedido}
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-yellow-500 text-xs">Não associado</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5 text-center border-b border-gray-100 dark:border-gray-700">
+                              {estaAssociado ? (
+                              <div className="flex gap-1 items-center justify-center">
+                                <div
+                                  onClick={() => {
+                                    const chave = `${numeroPedido}_${nfe.numero_nfe}_${item.codigo}`;
+                                    abrirModalContagem(
+                                      chave, item.codigo, item.descricao, qtdEsperada, unidadePedido,
+                                      itemComparacao?.codigo || null, itemComparacao?.descricao || null
+                                    );
+                                  }}
+                                  className={`px-3 py-2 border-2 rounded-md text-sm text-center cursor-pointer font-semibold font-mono min-w-[80px] transition-all hover:border-purple-500 ${
+                                    temConferencia
+                                      ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 text-gray-900 dark:text-white'
+                                      : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white'
+                                  }`}
+                                >
+                                  {(() => {
+                                    const chave = `${numeroPedido}_${nfe.numero_nfe}_${item.codigo}`;
+                                    const total = dadosConferencia[chave]?.totalContado || qtdFisica || 0;
+                                    const entradas = dadosConferencia[chave]?.entradas || [];
+                                    return (
+                                      <>
+                                        {total}
+                                        {entradas.length > 0 && (
+                                          <span className="text-[10px] text-purple-600 dark:text-purple-400 ml-1">
+                                            ({entradas.length})
+                                          </span>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    const chave = `${numeroPedido}_${nfe.numero_nfe}_${item.codigo}`;
+                                    abrirModalContagem(
+                                      chave, item.codigo, item.descricao, qtdEsperada, unidadePedido,
+                                      itemComparacao?.codigo || null, itemComparacao?.descricao || null
+                                    );
+                                  }}
+                                  className="px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-md text-sm font-bold transition-colors"
+                                >
+                                  +
+                                </button>
+                              </div>
+                              ) : (
+                                <div className="px-3 py-2 border-2 border-dashed border-yellow-300 dark:border-yellow-600 rounded-md text-xs text-yellow-600 dark:text-yellow-400 font-medium bg-yellow-50 dark:bg-yellow-900/10">
+                                  Associe primeiro
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5 text-center border-b border-gray-100 dark:border-gray-700">
+                              {temConferencia && estaAssociado ? (
+                                <div>
+                                  <div className={`font-mono font-bold text-sm ${
+                                    diferenca === 0 ? 'text-emerald-600' : diferenca < 0 ? 'text-red-600' : 'text-orange-600'
+                                  }`}>
+                                    {diferenca > 0 ? '+' : ''}{diferenca.toLocaleString('pt-BR')} {unidadePedido}
+                                  </div>
+                                  {fatorConversao && (
+                                    <div className="text-[9px] text-gray-400 mt-0.5 font-medium">
+                                      (Qtd digitada em {unidadePedido})
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400 text-xs">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5 text-center border-b border-gray-100 dark:border-gray-700">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border ${confBadgeClass}`}>
+                                {statusConf === 'nao_associado' && <><AlertCircle className="w-3 h-3" /> Não Assoc.</>}
+                                {statusConf === 'pendente' && <><Clock className="w-3 h-3" /> Pendente</>}
+                                {statusConf === 'confere' && <><CheckCircle className="w-3 h-3" /> Confere</>}
+                                {statusConf === 'falta' && <><AlertCircle className="w-3 h-3" /> Falta</>}
+                                {statusConf === 'excesso' && <><ArrowUpCircle className="w-3 h-3" /> Excesso</>}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-center border-b border-gray-100 dark:border-gray-700">
+                              {temConferencia && estaAssociado && (
+                                <button
+                                  onClick={async () => {
+                                    const codigoPed = itemComparacao?.codigo || item.codigo;
+                                    const descricaoPed = itemComparacao?.descricao || item.descricao;
+                                    const chave = `${numeroPedido}_${nfe.numero_nfe}_${item.codigo}`;
+                                    const hist = dadosConferencia[chave];
+                                    if (!hist || !hist.entradas || hist.entradas.length === 0) return;
+
+                                    let localEstoque = '___________________';
+                                    try {
+                                      const codigoParaBusca = codigosNumericos[codigoPed] || codigoPed;
+                                      const resp = await axios.post(`${API_BASE}/buscar-local-estoque`, { codigo_produto: codigoParaBusca });
+                                      if (resp.data.success && resp.data.local) localEstoque = resp.data.local;
+                                    } catch (e) {}
+
+                                    const etiquetasHTML = hist.entradas.map(c => `
+                                      <div class="etiqueta">
+                                        <div class="lado-esquerdo">
+                                          <div class="codigo-pedido">${codigoPed}</div>
+                                          <div class="descricao-pedido">${descricaoPed}</div>
+                                          <div class="info-linha">
+                                            <span class="label">NFe:</span>
+                                            <span class="valor">${nfe.numero_nfe}</span>
+                                            <span style="margin-left:2mm;" class="label">Local:</span>
+                                            <span class="valor">${localEstoque}</span>
+                                          </div>
+                                          <div class="info-linha">
+                                            <span class="label">Data:</span>
+                                            <span class="valor">${new Date().toLocaleDateString('pt-BR')}</span>
+                                          </div>
+                                        </div>
+                                        <div class="quantidade-box">
+                                          <div class="qtd-label">QTD</div>
+                                          <div class="qtd-valor">${c.quantidade}</div>
+                                        </div>
+                                      </div>
+                                    `).join('');
+
+                                    const jan = window.open('', '_blank');
+                                    jan.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiqueta - ${codigoPed}</title>
+                                      <style>
+                                        @page { size: 87mm 28mm; margin: 0; }
+                                        * { margin: 0; padding: 0; box-sizing: border-box; }
+                                        body { font-family: Arial, sans-serif; background: white; }
+                                        .etiqueta { width: 87mm; height: 28mm; padding: 2mm 3mm; background: white; display: flex; align-items: center; gap: 2mm; border: 2px solid #000; page-break-after: always; }
+                                        .etiqueta:last-child { page-break-after: auto; }
+                                        .lado-esquerdo { flex: 1; min-width: 0; overflow: hidden; }
+                                        .codigo-pedido { font-size: 13pt; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 1mm; margin-bottom: 1.5mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                                        .descricao-pedido { font-size: 9pt; font-weight: bold; margin-bottom: 1.5mm; line-height: 1.2; max-height: 7mm; overflow: hidden; }
+                                        .info-linha { font-size: 9pt; display: flex; gap: 1.5mm; line-height: 1.3; }
+                                        .info-linha + .info-linha { margin-top: 0.5mm; }
+                                        .label { font-weight: bold; }
+                                        .valor { font-weight: bold; }
+                                        .quantidade-box { border: 3px solid #000; padding: 1.5mm 3mm; text-align: center; min-width: 18mm; background: white; flex-shrink: 0; }
+                                        .qtd-label { font-size: 7pt; font-weight: bold; }
+                                        .qtd-valor { font-size: 18pt; font-weight: bold; line-height: 1; }
+                                        @media print { body { margin: 0; padding: 0; } }
+                                      </style></head><body>${etiquetasHTML}</body></html>`);
+                                    jan.document.close();
+                                    setTimeout(() => jan.print(), 250);
+                                  }}
+                                  className="p-1.5 text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded transition-colors"
+                                  title="Imprimir etiquetas deste item"
+                                >
+                                  <Printer className="w-4 h-4" />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Legenda */}
+              <div className="px-5 py-3 bg-gray-50 dark:bg-gray-700/50 border-t-2 border-gray-200 dark:border-gray-600 mt-4 rounded-b-lg flex gap-5 text-xs font-semibold flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 bg-yellow-100 border-2 border-yellow-400 rounded-sm"></span>
+                  <AlertCircle className="w-3 h-3 text-yellow-600" /> Não Associado
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 bg-emerald-100 border-2 border-emerald-500 rounded-sm"></span>
+                  <CheckCircle className="w-3 h-3 text-emerald-600" /> Confere (igual NFe)
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 bg-red-100 border-2 border-red-500 rounded-sm"></span>
+                  <AlertCircle className="w-3 h-3 text-red-600" /> Falta (menos que NFe)
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 bg-orange-100 border-2 border-orange-500 rounded-sm"></span>
+                  <ArrowUpCircle className="w-3 h-3 text-orange-600" /> Excesso (mais que NFe)
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 bg-gray-100 border-2 border-gray-400 rounded-sm"></span>
+                  <Clock className="w-3 h-3 text-gray-500" /> Pendente (não conferido)
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Botões de Ação - Conferência Física */}
+          {pedidoData && nfes.length > 0 && (
+            <div className="max-w-[1400px] mx-auto mt-4 flex gap-3 justify-center flex-wrap">
+              <button
+                className={`flex-1 min-w-[200px] max-w-[350px] h-12 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-lg font-bold text-base shadow-lg hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                onClick={() => {
+                  const todosItens = [];
+                  nfes.forEach(nfe => {
+                    nfe.itens.forEach(item => {
+                      const itemComp = comparacao?.find(c =>
+                        c.detalhesNFes?.some(d => d.numero_nfe === nfe.numero_nfe && d.codigo_nfe === item.codigo)
+                      );
+                      const chave = `${numeroPedido}_${nfe.numero_nfe}_${item.codigo}`;
+                      const qtdFis = conferencias[chave];
+                      todosItens.push({ associado: !!itemComp, conferido: qtdFis !== undefined && qtdFis !== null, codigo: item.codigo });
+                    });
+                  });
+                  const naoAssociados = todosItens.filter(i => !i.associado);
+                  const naoConferidos = todosItens.filter(i => i.associado && !i.conferido);
+                  if (naoAssociados.length > 0) {
+                    alert(`Não é possível concluir.\n\n${naoAssociados.length} item(ns) ainda não estão associados ao pedido.\n\nVolte à aba "Recebimento NFe" e associe todos os itens.`);
+                    return;
+                  }
+                  if (naoConferidos.length > 0) {
+                    alert(`Não é possível concluir.\n\n${naoConferidos.length} item(ns) ainda não foram conferidos fisicamente.\n\nRealize a contagem física de todos os itens.`);
+                    return;
+                  }
+                  concluirRecebimento();
+                }}
+                disabled={loading}
+              >
+                <CheckCircle className="w-5 h-5" />
+                Concluir Recebimento
+              </button>
+
+              <button
+                className={`flex-1 min-w-[200px] max-w-[350px] h-12 bg-gradient-to-r from-amber-400 to-amber-500 text-white rounded-lg font-bold text-base shadow-lg hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                onClick={manterEmAndamento}
+                disabled={loading}
+              >
+                <Clock className="w-5 h-5" />
+                Receber NF em Andamento
+              </button>
+            </div>
+          )}
+
+          </>}
+
+          {/* Modal para Adicionar Nova NFe */}
+          {adicionandoNFe && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-[600px] w-[90%] shadow-2xl animate-fade-in">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
+                  Adicionar NFe ao Pedido {numeroPedido}
+                </h3>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2">Link do XML da NFe:</label>
+                  <input
+                    type="text"
+                    value={linkAtual}
+                    onChange={(e) => setLinkAtual(e.target.value)}
+                    className="w-full h-12 px-4 border-2 border-gray-200 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all"
+                    placeholder="Cole o link do XML da NFe"
+                    onKeyPress={(e) => e.key === 'Enter' && adicionarNovaFe()}
+                    autoFocus
+                  />
+                </div>
+
+                <div className="flex gap-3 justify-end">
+                  <button
+                    className="px-4 py-2.5 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-semibold text-sm transition-colors"
+                    onClick={() => {
+                      setAdicionandoNFe(false);
+                      setLinkAtual('');
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    className={`px-4 py-2.5 bg-gradient-to-r from-primary-500 to-primary-700 text-white rounded-lg font-semibold text-sm shadow-lg transition-all flex items-center gap-2 ${loading ? 'opacity-70 cursor-not-allowed' : 'hover:-translate-y-0.5'}`}
+                    onClick={adicionarNovaFe}
+                    disabled={loading}
+                  >
+                    {loading ? <span className="spinner"></span> : <CheckCircle className="w-4 h-4" />}
+                    {loading ? 'Processando...' : 'Adicionar NFe'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Modal de Associação */}
+          {associandoItem && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-[800px] w-[90%] max-h-[80vh] overflow-auto shadow-2xl animate-fade-in">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
+                  Associar Item do Pedido com NFe
+                </h3>
+
+                <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg mb-4">
+                  <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Item do Pedido:</div>
+                  <div className="font-bold text-gray-900 dark:text-white">
+                    {associandoItem.codigo} - {decodeHtmlEntities(associandoItem.descricao)}
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Qtd: {associandoItem.qtdPedido.toLocaleString('pt-BR')} {associandoItem.unidade}
+                  </div>
+                </div>
+
+                <div className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+                  Selecione o item correspondente da NFe:
+                </div>
+
+                {itensNFeDisponiveis.length === 0 ? (
+                  <div className="p-5 text-center text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                    Nenhum item disponível para associação
+                  </div>
+                ) : (
+                  <div className="max-h-[400px] overflow-auto">
+                    {itensNFeDisponiveis.map((itemNFe, idx) => (
+                      <div
+                        key={idx}
+                        className="p-3 mb-2 border-2 border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer transition-all hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                        onClick={() => associarItem(associandoItem.codigo, itemNFe.codigo, itemNFe.nfe_numero)}
+                      >
+                        <div className="font-bold text-gray-900 dark:text-white mb-1">
+                          {itemNFe.codigo} - {decodeHtmlEntities(itemNFe.descricao)}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          NFe: {itemNFe.nfe_numero} | Qtd: {parseFloat(itemNFe.quantidade).toLocaleString('pt-BR')} {itemNFe.unidade}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-4 text-right">
+                  <button
+                    className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-semibold text-sm transition-colors"
+                    onClick={() => setAssociandoItem(null)}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Modal de Configuração de Conversão */}
+          {configurandoConversao && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-[500px] w-[90%] shadow-2xl animate-fade-in">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                  <Settings className="w-5 h-5" />
+                  Configurar Conversão de Unidade
+                </h3>
+
+                <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg mb-4 border-2 border-amber-400">
+                  <div className="text-sm text-amber-800 dark:text-amber-300 mb-2 font-semibold">
+                    {configurandoConversao.semAssociacao ? 'Configurar Conversão Direta' : 'Unidades diferentes detectadas!'}
+                  </div>
+                  <div className="text-xs text-amber-700 dark:text-amber-400">
+                    <strong>NFe:</strong> {configurandoConversao.unidadeNFe}
+                  </div>
+                  {!configurandoConversao.semAssociacao && (
+                    <div className="text-xs text-amber-700 dark:text-amber-400">
+                      <strong>Pedido:</strong> {configurandoConversao.unidade}
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg mb-4">
+                  <div className="font-bold text-gray-900 dark:text-white mb-1">
+                    {configurandoConversao.codigoPedido || configurandoConversao.codigo}
+                    {configurandoConversao.descricao && ` - ${decodeHtmlEntities(configurandoConversao.descricao)}`}
+                  </div>
+                  {!configurandoConversao.semAssociacao && configurandoConversao.qtdPedido && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      Pedido: {configurandoConversao.qtdPedido.toLocaleString('pt-BR')} {configurandoConversao.unidade}
+                    </div>
+                  )}
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    NFe: {configurandoConversao.qtdNFe?.toLocaleString('pt-BR')} {configurandoConversao.unidadeNFe}
+                  </div>
+                </div>
+
+                {configurandoConversao.semAssociacao && (
+                  <div className="mb-4">
+                    <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                      Unidade do Pedido:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: UND, PC, CX"
+                      className="w-full h-10 px-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono font-semibold uppercase bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                      id="unidadePedido"
+                    />
+                  </div>
+                )}
+
+                <div className="mb-4">
+                  <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                    Fator de Conversão:
+                  </label>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-2 bg-blue-50 dark:bg-blue-900/20 p-2 rounded">
+                    Informe quantas <strong>{configurandoConversao.semAssociacao ? '[UNIDADE PEDIDO]' : configurandoConversao.unidade}</strong> equivalem a 1 <strong>{configurandoConversao.unidadeNFe}</strong>
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Ex: 100 (se 1 CT = 100 UN)"
+                    className="w-full h-10 px-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono font-semibold bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                    id="fatorConversao"
+                    autoFocus
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        const fator = document.getElementById('fatorConversao').value;
+                        if (fator && fator > 0) {
+                          let unidadePedidoVal = configurandoConversao.unidade;
+                          if (configurandoConversao.semAssociacao) {
+                            unidadePedidoVal = document.getElementById('unidadePedido').value.trim().toUpperCase();
+                            if (!unidadePedidoVal) {
+                              alert('Informe a unidade do pedido');
+                              return;
+                            }
+                          }
+                          const codigoProduto = configurandoConversao.codigoPedido || configurandoConversao.codigo || configurandoConversao.codigoNFe;
+                          salvarConversao(codigoProduto, unidadePedidoVal, configurandoConversao.unidadeNFe, fator);
+                        }
+                      }
+                    }}
+                  />
+                </div>
+
+                <div className="flex gap-3 justify-end">
+                  <button
+                    className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-semibold text-sm transition-colors"
+                    onClick={() => setConfigurandoConversao(null)}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    className="px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-700 text-white rounded-lg font-semibold text-sm shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2"
+                    onClick={() => {
+                      const fator = document.getElementById('fatorConversao').value;
+                      if (fator && fator > 0) {
+                        let unidadePedidoVal = configurandoConversao.unidade;
+                        if (configurandoConversao.semAssociacao) {
+                          unidadePedidoVal = document.getElementById('unidadePedido')?.value.trim().toUpperCase();
+                          if (!unidadePedidoVal) {
+                            alert('Informe a unidade do pedido');
+                            return;
+                          }
+                        }
+                        const codigoProduto = configurandoConversao.codigoPedido || configurandoConversao.codigo || configurandoConversao.codigoNFe;
+                        salvarConversao(codigoProduto, unidadePedidoVal, configurandoConversao.unidadeNFe, fator);
+                      } else {
+                        setError('Informe um fator de conversão válido');
+                      }
+                    }}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Salvar Conversão
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL DE CONTAGEM FÍSICA */}
+          {modalContagemAberto && itemSelecionadoIdx && infoModal && (
+            <div
+              className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+              onClick={fecharModalContagem}
+            >
+              <div
+                className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-[600px] w-[90%] max-h-[80vh] overflow-auto shadow-2xl animate-fade-in"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex justify-between items-center mb-5">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <ClipboardList className="w-5 h-5 text-purple-500" />
+                    Contagem Física - {infoModal.codigo}
+                  </h3>
+                  <button
+                    onClick={fecharModalContagem}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="mb-5 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-300 dark:border-purple-700">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    {decodeHtmlEntities(infoModal.descricao)}
+                  </div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Esperado: {infoModal.qtdEsperada} {infoModal.unidade}
+                  </div>
+                </div>
+
+                <div className="mb-5">
+                  <label className="block text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                    Adicionar Nova Contagem
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder={`Quantidade em ${infoModal.unidade}`}
+                      value={novaQuantidadeContagem}
+                      onChange={(e) => setNovaQuantidadeContagem(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && adicionarContagem()}
+                      className="flex-1 h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                    <button
+                      onClick={adicionarContagem}
+                      className="px-5 h-10 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-sm font-semibold transition-colors"
+                    >
+                      Adicionar
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-3">
+                    <label className="text-sm font-semibold text-gray-900 dark:text-white">
+                      Histórico de Contagens
+                    </label>
+                    <div className="text-sm font-bold text-purple-600 dark:text-purple-400">
+                      Total: {dadosConferencia[itemSelecionadoIdx]?.totalContado || 0} {infoModal.unidade}
+                    </div>
+                  </div>
+
+                  {dadosConferencia[itemSelecionadoIdx]?.entradas?.length > 0 ? (
+                    <div className="max-h-[300px] overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                      {dadosConferencia[itemSelecionadoIdx].entradas.map((contagem, idxContagem) => (
+                        <div
+                          key={idxContagem}
+                          className={`flex justify-between items-center px-3 py-3 ${
+                            idxContagem < dadosConferencia[itemSelecionadoIdx].entradas.length - 1 ? 'border-b border-gray-200 dark:border-gray-700' : ''
+                          } ${idxContagem % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-800/50'}`}
+                        >
+                          <div className="flex-1">
+                            <div className="text-base font-semibold text-gray-900 dark:text-white">
+                              {contagem.quantidade} {infoModal.unidade}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-0.5">
+                              {contagem.data}
+                            </div>
+                          </div>
+                          <div className="flex gap-1.5 items-center">
+                            <button
+                              onClick={async () => {
+                                const codigoPed = infoModal.codigoPedido || infoModal.codigo;
+                                const descricaoPed = infoModal.descricaoPedido || infoModal.descricao;
+                                const nfeAtual = nfes.find(nfe => nfe.itens.some(it => it.codigo === infoModal.codigo));
+                                const numNFe = nfeAtual ? nfeAtual.numero_nfe : 'N/A';
+                                let localEstoque = '___________________';
+                                try {
+                                  const codigoParaBusca = codigosNumericos[codigoPed] || codigoPed;
+                                  const resp = await axios.post(`${API_BASE}/buscar-local-estoque`, { codigo_produto: codigoParaBusca });
+                                  if (resp.data.success && resp.data.local) localEstoque = resp.data.local;
+                                } catch (e) {}
+                                const jan = window.open('', '_blank');
+                                jan.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiqueta</title>
+                                  <style>
+                                    @page { size: 87mm 28mm; margin: 0; }
+                                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                                    body { font-family: Arial, sans-serif; }
+                                    .etiqueta { width: 87mm; height: 28mm; padding: 2mm 3mm; display: flex; align-items: center; gap: 2mm; border: 2px solid #000; }
+                                    .lado-esquerdo { flex: 1; min-width: 0; overflow: hidden; }
+                                    .codigo-pedido { font-size: 13pt; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 1mm; margin-bottom: 1.5mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                                    .descricao-pedido { font-size: 9pt; font-weight: bold; margin-bottom: 1.5mm; line-height: 1.2; max-height: 7mm; overflow: hidden; }
+                                    .info-linha { font-size: 9pt; display: flex; gap: 1.5mm; line-height: 1.3; }
+                                    .info-linha + .info-linha { margin-top: 0.5mm; }
+                                    .label, .valor { font-weight: bold; }
+                                    .quantidade-box { border: 3px solid #000; padding: 1.5mm 3mm; text-align: center; min-width: 18mm; flex-shrink: 0; }
+                                    .qtd-label { font-size: 7pt; font-weight: bold; }
+                                    .qtd-valor { font-size: 18pt; font-weight: bold; line-height: 1; }
+                                  </style></head><body>
+                                  <div class="etiqueta">
+                                    <div class="lado-esquerdo">
+                                      <div class="codigo-pedido">${codigoPed}</div>
+                                      <div class="descricao-pedido">${descricaoPed}</div>
+                                      <div class="info-linha">
+                                        <span class="label">NFe:</span><span class="valor">${numNFe}</span>
+                                        <span style="margin-left:2mm;" class="label">Local:</span><span class="valor">${localEstoque}</span>
+                                      </div>
+                                      <div class="info-linha">
+                                        <span class="label">Data:</span><span class="valor">${new Date().toLocaleDateString('pt-BR')}</span>
+                                      </div>
+                                    </div>
+                                    <div class="quantidade-box">
+                                      <div class="qtd-label">QTD</div>
+                                      <div class="qtd-valor">${contagem.quantidade}</div>
+                                    </div>
+                                  </div>
+                                </body></html>`);
+                                jan.document.close();
+                                setTimeout(() => jan.print(), 250);
+                              }}
+                              className="px-2.5 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded text-xs transition-colors flex items-center gap-1"
+                              title="Imprimir etiqueta desta contagem"
+                            >
+                              <Printer className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => removerContagem(idxContagem)}
+                              className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-xs transition-colors"
+                            >
+                              Remover
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-8 text-center text-gray-500 dark:text-gray-400 text-sm bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
+                      Nenhuma contagem registrada
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-5 flex justify-between items-center">
+                  <button
+                    onClick={imprimirEtiquetas}
+                    disabled={!dadosConferencia[itemSelecionadoIdx]?.entradas || dadosConferencia[itemSelecionadoIdx].entradas.length === 0}
+                    className={`px-5 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 transition-all ${
+                      dadosConferencia[itemSelecionadoIdx]?.entradas?.length > 0
+                        ? 'bg-gradient-to-r from-primary-500 to-primary-700 text-white shadow-lg hover:-translate-y-0.5'
+                        : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed opacity-60'
+                    }`}
+                  >
+                    <Printer className="w-4 h-4" />
+                    Imprimir Etiquetas
+                    {dadosConferencia[itemSelecionadoIdx]?.entradas?.length > 0 && (
+                      <span className="bg-white/30 px-2 py-0 rounded-full text-xs">
+                        {dadosConferencia[itemSelecionadoIdx].entradas.length}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={fecharModalContagem}
+                    className="px-5 py-2.5 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="max-w-[1400px] mx-auto mt-6 mb-4 text-center">
+            <button
+              className="px-6 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-xl font-semibold text-sm transition-all inline-flex items-center gap-2 border border-gray-300 dark:border-gray-600"
+              onClick={() => window.location.href = `http://${window.location.hostname}:3000`}
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Voltar ao Menu Principal
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL DANFE - Visualização formatada da NFe ===== */}
+      {modalDanfe && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 pt-10 overflow-y-auto" onClick={() => setModalDanfe(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl animate-fade-in" onClick={e => e.stopPropagation()}>
+            {/* Header do Modal */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 rounded-t-xl">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Nota Fiscal Eletrônica</h2>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Visualização formatada do XML</p>
+                </div>
+              </div>
+              <button onClick={() => setModalDanfe(null)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {loadingDanfe ? (
+              <div className="py-20 text-center">
+                <Loader2 className="w-10 h-10 text-primary-500 animate-spin mx-auto mb-4" />
+                <p className="text-gray-500 dark:text-gray-400">Carregando dados da NFe...</p>
+              </div>
+            ) : modalDanfe.dados ? (
+              <div className="p-6 space-y-5 max-h-[calc(100vh-150px)] overflow-y-auto">
+                {/* Cabeçalho da Nota */}
+                <div className="bg-primary-50 dark:bg-primary-900/20 rounded-lg p-4 border border-primary-200 dark:border-primary-800">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 uppercase font-semibold">Número NF</p>
+                      <p className="text-xl font-bold text-primary-700 dark:text-primary-400">{modalDanfe.dados.numeroNF || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 uppercase font-semibold">Série</p>
+                      <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{modalDanfe.dados.serie || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 uppercase font-semibold">Data Emissão</p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {modalDanfe.dados.dataEmissao ? new Date(modalDanfe.dados.dataEmissao).toLocaleDateString('pt-BR') : '-'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 uppercase font-semibold">Natureza da Operação</p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{modalDanfe.dados.naturezaOperacao || '-'}</p>
+                    </div>
+                  </div>
+                  {modalDanfe.dados.chaveAcesso && (
+                    <div className="mt-3 pt-3 border-t border-primary-200 dark:border-primary-800">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 uppercase font-semibold">Chave de Acesso</p>
+                      <p className="text-xs font-mono text-gray-700 dark:text-gray-300 break-all mt-1">{modalDanfe.dados.chaveAcesso}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Emitente e Destinatário */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Emitente */}
+                  {modalDanfe.dados.emitente && (
+                    <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
+                      <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-blue-500" />
+                        Emitente
+                      </h3>
+                      <div className="space-y-1.5 text-sm">
+                        <p className="font-semibold text-gray-900 dark:text-gray-100">{modalDanfe.dados.emitente.razaoSocial}</p>
+                        <p className="text-gray-500 dark:text-gray-400">CNPJ: {formatarCNPJ(modalDanfe.dados.emitente.cnpj)}</p>
+                        {modalDanfe.dados.emitente.inscricaoEstadual && (
+                          <p className="text-gray-500 dark:text-gray-400">IE: {modalDanfe.dados.emitente.inscricaoEstadual}</p>
+                        )}
+                        {modalDanfe.dados.emitente.endereco && (
+                          <p className="text-gray-500 dark:text-gray-400 flex items-start gap-1">
+                            <MapPin className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                            {modalDanfe.dados.emitente.endereco}{modalDanfe.dados.emitente.numero ? `, ${modalDanfe.dados.emitente.numero}` : ''} - {modalDanfe.dados.emitente.cidade}/{modalDanfe.dados.emitente.uf}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Destinatário */}
+                  {modalDanfe.dados.destinatario && (
+                    <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
+                      <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-emerald-500" />
+                        Destinatário
+                      </h3>
+                      <div className="space-y-1.5 text-sm">
+                        <p className="font-semibold text-gray-900 dark:text-gray-100">{modalDanfe.dados.destinatario.razaoSocial}</p>
+                        <p className="text-gray-500 dark:text-gray-400">CNPJ: {formatarCNPJ(modalDanfe.dados.destinatario.cnpj)}</p>
+                        {modalDanfe.dados.destinatario.inscricaoEstadual && (
+                          <p className="text-gray-500 dark:text-gray-400">IE: {modalDanfe.dados.destinatario.inscricaoEstadual}</p>
+                        )}
+                        {modalDanfe.dados.destinatario.cidade && (
+                          <p className="text-gray-500 dark:text-gray-400 flex items-start gap-1">
+                            <MapPin className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                            {modalDanfe.dados.destinatario.cidade}/{modalDanfe.dados.destinatario.uf}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Tabela de Produtos */}
+                {modalDanfe.dados.itens && modalDanfe.dados.itens.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+                      <Package className="w-4 h-4 text-primary-500" />
+                      Produtos ({modalDanfe.dados.itens.length})
+                    </h3>
+                    <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-gray-50 dark:bg-gray-700 border-b-2 border-gray-200 dark:border-gray-600">
+                            <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 w-10">#</th>
+                            <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 min-w-[100px]">Código</th>
+                            <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Descrição</th>
+                            <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 w-16">Un.</th>
+                            <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 w-20">Qtd.</th>
+                            <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 w-28">Vl. Unit.</th>
+                            <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 w-28">Vl. Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                          {modalDanfe.dados.itens.map((item, idx) => (
+                            <tr key={idx} className={`${idx % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-800/50'}`}>
+                              <td className="px-3 py-2.5 text-center text-gray-400 text-xs">{idx + 1}</td>
+                              <td className="px-3 py-2.5 font-mono text-xs text-gray-700 dark:text-gray-300">{item.codigo}</td>
+                              <td className="px-3 py-2.5 font-semibold text-gray-900 dark:text-white text-xs">{item.descricao}</td>
+                              <td className="px-3 py-2.5 text-center text-gray-500 dark:text-gray-400 text-xs">{item.unidade}</td>
+                              <td className="px-3 py-2.5 text-right font-mono text-gray-700 dark:text-gray-300 text-xs">{parseFloat(item.quantidade || 0).toLocaleString('pt-BR')}</td>
+                              <td className="px-3 py-2.5 text-right font-mono text-gray-700 dark:text-gray-300 text-xs">{formatarMoeda(item.valorUnitario)}</td>
+                              <td className="px-3 py-2.5 text-right font-mono font-semibold text-gray-900 dark:text-white text-xs">{formatarMoeda(item.valorTotal)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Totais */}
+                {modalDanfe.dados.totais && (
+                  <div className="bg-gray-900 dark:bg-gray-950 rounded-lg p-5 text-white">
+                    <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-primary-400" />
+                      Totais da Nota
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <p className="text-xs text-gray-400 uppercase">Valor Produtos</p>
+                        <p className="text-lg font-bold">{formatarMoeda(modalDanfe.dados.totais.valorProdutos)}</p>
+                      </div>
+                      {modalDanfe.dados.totais.valorICMS && modalDanfe.dados.totais.valorICMS !== '0.00' && (
+                        <div>
+                          <p className="text-xs text-gray-400 uppercase">ICMS</p>
+                          <p className="text-lg font-bold">{formatarMoeda(modalDanfe.dados.totais.valorICMS)}</p>
+                        </div>
+                      )}
+                      {modalDanfe.dados.totais.valorIPI && modalDanfe.dados.totais.valorIPI !== '0.00' && (
+                        <div>
+                          <p className="text-xs text-gray-400 uppercase">IPI</p>
+                          <p className="text-lg font-bold">{formatarMoeda(modalDanfe.dados.totais.valorIPI)}</p>
+                        </div>
+                      )}
+                      {modalDanfe.dados.totais.valorFrete && modalDanfe.dados.totais.valorFrete !== '0.00' && (
+                        <div>
+                          <p className="text-xs text-gray-400 uppercase">Frete</p>
+                          <p className="text-lg font-bold">{formatarMoeda(modalDanfe.dados.totais.valorFrete)}</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-gray-700 flex justify-between items-center">
+                      <span className="text-sm text-gray-400 uppercase font-semibold">Valor Total da Nota</span>
+                      <span className="text-2xl font-bold text-primary-400">{formatarMoeda(modalDanfe.dados.totais.valorTotal)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="py-20 text-center">
+                <AlertCircle className="w-10 h-10 text-red-400 mx-auto mb-4" />
+                <p className="text-gray-500 dark:text-gray-400">Não foi possível carregar os dados da NFe</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default App;

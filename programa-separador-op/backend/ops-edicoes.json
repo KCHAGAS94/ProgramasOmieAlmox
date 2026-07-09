@@ -1,0 +1,166 @@
+{
+  "11857452819": {
+    "produtos": [
+      {
+        "codigo": "CA-MPPLS034201XX",
+        "totalSeparado": "0",
+        "observacao": "TESTE"
+      },
+      {
+        "codigo": "CA-MPMEC050201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-MPCON024201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-MPMEC018201XX",
+        "totalSeparado": "0",
+        "observacao": "teste"
+      },
+      {
+        "codigo": "CA-MPMEC053201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-MPMLG232101XX",
+        "totalSeparado": "",
+        "observacao": ""
+      }
+    ]
+  },
+  "11859158104": {
+    "produtos": [
+      {
+        "codigo": "CA-MPPLS024201XX",
+        "totalSeparado": "50",
+        "observacao": "COR ROSA"
+      },
+      {
+        "codigo": "CA-MPPLS022201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-MPMEC052201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-MPPLS001101XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-MPMEC109101XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-PPCAR021201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      }
+    ]
+  },
+  "11826255288": {
+    "produtos": [
+      {
+        "codigo": "CA-MPPLS036201XX",
+        "totalSeparado": "20",
+        "observacao": "50"
+      },
+      {
+        "codigo": "CA-MPMEC098201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-MPMEC046201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-MPMEC080201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      }
+    ]
+  },
+  "11826781206": {
+    "produtos": [
+      {
+        "codigo": "CA-MPMEC050201XX",
+        "totalSeparado": "50",
+        "observacao": "50"
+      },
+      {
+        "codigo": "CA-MPCON024201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-MPMEC018201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-MPPLS009201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-MPMEC053201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-MPMLG232101XX",
+        "totalSeparado": "",
+        "observacao": ""
+      }
+    ],
+    "modificado_por": "Usuário Desconhecido",
+    "modificado_em": "2026-02-11T16:14:03.268Z"
+  },
+  "11857788231": {
+    "produtos": [
+      {
+        "codigo": "CA-MPMEC086201XX",
+        "totalSeparado": "50",
+        "observacao": "50"
+      },
+      {
+        "codigo": "CA-MPCON025201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-MPMEC018201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-MPMEC053201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-MPPLS034201XX",
+        "totalSeparado": "",
+        "observacao": ""
+      },
+      {
+        "codigo": "CA-MPMLG251101XX",
+        "totalSeparado": "",
+        "observacao": ""
+      }
+    ],
+    "modificado_por": "Usuário Desconhecido",
+    "modificado_em": "2026-02-11T16:20:12.485Z"
+  }
+}

@@ -1,0 +1,26 @@
+[
+  {
+    "numero_pedido": "1100",
+    "nfes": [
+      {
+        "numero_nfe": "317132",
+        "link_xml": "https://app.omie.com.br/resources/temp/d1212-yhxpjhb9ncr4/42260182901000001441550100003171321976657645-procnfe.xml?SrvCheck=57481.6357481.63,id=D1212-yhxpjhb9ncr4",
+        "associacoes": {
+          "CA-MPCBO010201XX": "4830075",
+          "CA-MPFON010201XX": "4820105"
+        },
+        "data_processamento": "2026-02-13T18:58:20.043Z"
+      },
+      {
+        "numero_nfe": "11272",
+        "link_xml": "https://app.omie.com.br/resources/temp/d1212-yhxpjhb9ncr4/35260105134930000151550010000112721856323121-procnfe.xml?SrvCheck=57465.8557465.85,id=D1212-yhxpjhb9ncr4",
+        "associacoes": {
+          "CA-MPCBO010201XX": "001083",
+          "CA-MPFON010201XX": "002269"
+        },
+        "data_processamento": "2026-02-13T18:58:22.964Z"
+      }
+    ],
+    "atualizado_em": "2026-02-13T18:58:22.964Z"
+  }
+]

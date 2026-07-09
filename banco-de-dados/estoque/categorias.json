@@ -1,0 +1,11 @@
+{
+  "categorias": [
+    {
+      "id": 1,
+      "nome": "Sem Categoria",
+      "cor": "#6b7280",
+      "ordem": -1
+    }
+  ],
+  "proximoId": 2
+}

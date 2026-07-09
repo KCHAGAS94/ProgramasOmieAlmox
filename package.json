@@ -1,0 +1,38 @@
+{
+  "name": "programas-omie",
+  "version": "1.0.0",
+  "description": "Sistema integrado Omie - Menu + Separador + Recebimento + Separador OP + Separador Remessa + Inventário + Requisição Material + Estoque + Programas Auxiliares",
+  "private": true,
+  "workspaces": [
+    "menu-principal/backend",
+    "menu-principal/frontend",
+    "programa-separador/backend",
+    "programa-separador/frontend",
+    "programa-recebimento/backend",
+    "programa-recebimento/frontend",
+    "programa-separador-op/backend",
+    "programa-separador-op/frontend",
+    "programa-separador-remessa/backend",
+    "programa-separador-remessa/frontend",
+    "programa-inventario/backend",
+    "programa-inventario/frontend",
+    "programa-requisicao-material/backend",
+    "programa-requisicao-material/frontend",
+    "programa-estoque/backend",
+    "programa-estoque/frontend",
+    "programas-auxiliares/backend",
+    "programas-auxiliares/frontend",
+    "programa-relatorio/backend",
+    "programa-relatorio/frontend",
+    "agendador-atualizacoes"
+  ],
+  "scripts": {
+    "install-all": "npm install",
+    "clean": "find . -name 'node_modules' -type d -prune -not -path './node_modules' -exec rm -rf {} +",
+    "dev": "concurrently --kill-others --names \"Menu-Back,Menu-Front,Separador-Back,Separador-Front,Recebimento-Back,Recebimento-Front,OP-Back,OP-Front,Remessa-Back,Remessa-Front,Inventario-Back,Inventario-Front,Requisicao-Back,Requisicao-Front,Estoque-Back,Estoque-Front,Auxiliares-Back,Auxiliares-Front,Relatorio-Back,Relatorio-Front,Agendador\" --prefix-colors \"bgBlue.bold,bgMagenta.bold,bgGreen.bold,bgYellow.bold,bgCyan.bold,bgRed.bold,bgWhite.bold,bgBlack.bold,bgGray.bold,bgBrightBlue.bold,bgCyan.bold,bgMagenta.bold,bgGreen.bold,bgYellow.bold,bgWhite.bold,bgCyan.bold,bgRed.bold,bgMagenta.bold,bgBlue.bold,bgGreen.bold,bgYellow.bold\" \"npm start -w menu-principal-backend\" \"npm run dev -w menu-principal-frontend\" \"npm start -w programa-separador-backend\" \"npm run dev -w programa-separador-frontend\" \"npm start -w programa-recebimento-backend\" \"npm run dev -w programa-recebimento-frontend\" \"npm start -w programa-separador-op-backend\" \"npm run dev -w programa-separador-op-frontend\" \"npm start -w programa-separador-remessa-backend\" \"npm run dev -w programa-separador-remessa-frontend\" \"npm start -w programa-inventario-backend\" \"npm run dev -w programa-inventario-frontend\" \"npm start -w requisicao-material-backend\" \"npm run dev -w requisicao-material-frontend\" \"npm start -w programa-estoque-backend\" \"npm run dev -w programa-estoque-frontend\" \"npm start -w programas-auxiliares-backend\" \"npm run dev -w programas-auxiliares-frontend\" \"npm start -w programa-relatorio-backend\" \"npm run dev -w programa-relatorio-frontend\" \"npm start -w agendador-atualizacoes\"",
+    "start": "npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

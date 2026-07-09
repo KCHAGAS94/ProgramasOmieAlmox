@@ -1,0 +1,85 @@
+{
+  "11855316576": {
+    "produtos": [
+      {
+        "codigo": "CA-MPPCB008307XX",
+        "totalSeparado": "1000",
+        "observacao": "",
+        "entradas": [
+          {
+            "quantidade": 10,
+            "data": "11/02/2026, 09:07:35"
+          },
+          {
+            "quantidade": 20,
+            "data": "11/02/2026, 09:07:37"
+          },
+          {
+            "quantidade": 70,
+            "data": "11/02/2026, 09:07:39"
+          },
+          {
+            "quantidade": 200,
+            "data": "11/02/2026, 09:07:42"
+          },
+          {
+            "quantidade": 500,
+            "data": "11/02/2026, 09:07:43"
+          },
+          {
+            "quantidade": 100,
+            "data": "11/02/2026, 09:07:44"
+          },
+          {
+            "quantidade": 100,
+            "data": "11/02/2026, 09:07:46"
+          }
+        ]
+      },
+      {
+        "codigo": "CA-MPCON035301XX",
+        "totalSeparado": "600",
+        "observacao": "",
+        "entradas": [
+          {
+            "quantidade": 600,
+            "data": "11/02/2026, 09:26:57"
+          }
+        ]
+      },
+      {
+        "codigo": "CA-MPSWT005301XX",
+        "totalSeparado": "",
+        "observacao": "",
+        "entradas": []
+      }
+    ]
+  },
+  "11862255526": {
+    "produtos": [
+      {
+        "codigo": "CA-MPPCB008307XX",
+        "totalSeparado": "3",
+        "observacao": "",
+        "entradas": [
+          {
+            "quantidade": 3,
+            "data": "11/02/2026, 10:03:39"
+          }
+        ]
+      },
+      {
+        "codigo": "CA-MPCON035301XX",
+        "totalSeparado": "",
+        "observacao": "",
+        "entradas": []
+      },
+      {
+        "codigo": "CA-MPSWT005301XX",
+        "totalSeparado": "",
+        "observacao": "",
+        "entradas": []
+      }
+    ]
+  }
+}

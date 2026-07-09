@@ -1,0 +1,177 @@
+{
+  "inventarios": [
+    {
+      "id": "1770825837439",
+      "nome": "teste",
+      "descricao": "teste",
+      "localEstoque": "almoxarifado",
+      "data_criacao": "2026-02-11T16:03:57.439Z",
+      "data_modificacao": "2026-02-11T16:04:30.166Z",
+      "status": "concluido",
+      "mostrar_contagem_2": false,
+      "mostrar_contagem_3": false,
+      "produtos": [
+        {
+          "codigo": "CA-MPPCB011303XX",
+          "codigo_produto": 2683617811,
+          "descricao": "PLACA DE CIRCUITO IMPRESSO MDRELE V3P2",
+          "modelo": "P09A01",
+          "quantidade_sistema": 470,
+          "quantidade_contada": 50,
+          "diferenca": -420,
+          "observacao": "",
+          "quantidade_contada_2": null,
+          "quantidade_contada_3": null
+        },
+        {
+          "codigo": "CA-MPPCB008307XX",
+          "codigo_produto": 2683524601,
+          "descricao": "PLACA DE CIRCUITO IMPRESSO KEYPAD ENTRY/BL - 3 E 6 V1R7",
+          "modelo": "P09A01",
+          "quantidade_sistema": 2500,
+          "quantidade_contada": 0,
+          "diferenca": 0,
+          "observacao": "",
+          "quantidade_contada_2": null,
+          "quantidade_contada_3": null
+        },
+        {
+          "codigo": "CA-MPPCB019301XX",
+          "codigo_produto": 2725078346,
+          "descricao": "PLACA DE CIRCUITO IMPRESSO RF2IR V2.1REV0",
+          "modelo": "P09A01",
+          "quantidade_sistema": 96,
+          "quantidade_contada": 0,
+          "diferenca": 0,
+          "observacao": "",
+          "quantidade_contada_2": null,
+          "quantidade_contada_3": null
+        },
+        {
+          "codigo": "CA-MPPCB017101XX",
+          "codigo_produto": 2724681553,
+          "descricao": "PLACA DE CIRCUITO IMPRESSO KEYPAD PROCESSADOR 3E6.",
+          "modelo": "P09A01",
+          "quantidade_sistema": 2625,
+          "quantidade_contada": 0,
+          "diferenca": 0,
+          "observacao": "",
+          "quantidade_contada_2": null,
+          "quantidade_contada_3": null
+        },
+        {
+          "codigo": "CA-MPPCB022301XX",
+          "codigo_produto": 2725882915,
+          "descricao": "PLACA DE CIRCUITO IMPRESSO MULTIROOM EXPANDER REV1",
+          "modelo": "P09A01",
+          "quantidade_sistema": 0,
+          "quantidade_contada": 0,
+          "diferenca": 0,
+          "observacao": "",
+          "quantidade_contada_2": null,
+          "quantidade_contada_3": null
+        },
+        {
+          "codigo": "CA-MPPCB024301XX",
+          "codigo_produto": 2726534274,
+          "descricao": "PLACA CIRC. IMP. KEYPAD CAN REV4 3E6 CONTROLART.",
+          "modelo": "P09A01",
+          "quantidade_sistema": 54,
+          "quantidade_contada": 0,
+          "diferenca": 0,
+          "observacao": "",
+          "quantidade_contada_2": null,
+          "quantidade_contada_3": null
+        },
+        {
+          "codigo": "CA-MPPCB025301XX",
+          "codigo_produto": 2726534870,
+          "descricao": "PLACA CIRC. IMP. KEYPAD CAN REV4 4.",
+          "modelo": "P09A01",
+          "quantidade_sistema": 33,
+          "quantidade_contada": 0,
+          "diferenca": 0,
+          "observacao": "",
+          "quantidade_contada_2": null,
+          "quantidade_contada_3": null
+        },
+        {
+          "codigo": "CA-MPPCB026301XX",
+          "codigo_produto": 2727477146,
+          "descricao": "PLACA DE CIRCUITO IMPRESSO RGBW V2REV1",
+          "modelo": "P09A01",
+          "quantidade_sistema": 1,
+          "quantidade_contada": 0,
+          "diferenca": 0,
+          "observacao": "",
+          "quantidade_contada_2": null,
+          "quantidade_contada_3": null
+        },
+        {
+          "codigo": "CA-MPPCB028301XX",
+          "codigo_produto": 2729463121,
+          "descricao": "PLACA DE CIRCUITO IMPRESSO BLASTER 360 RETANGULAR",
+          "modelo": "P09A01",
+          "quantidade_sistema": 58,
+          "quantidade_contada": 0,
+          "diferenca": 0,
+          "observacao": "",
+          "quantidade_contada_2": null,
+          "quantidade_contada_3": null
+        },
+        {
+          "codigo": "CA-MPPCB030201XX",
+          "codigo_produto": 2731884495,
+          "descricao": "PLACA CIRC. IMP. BLASTER 360 MOD RENTE",
+          "modelo": "P09A01",
+          "quantidade_sistema": 1239,
+          "quantidade_contada": 0,
+          "diferenca": 0,
+          "observacao": "",
+          "quantidade_contada_2": null,
+          "quantidade_contada_3": null
+        },
+        {
+          "codigo": "CA-MPPCB027304XX",
+          "codigo_produto": 11602209331,
+          "descricao": "PLACA DE CIRCUITO IMPRESSO MULTIROOM FRONTAL REV4",
+          "modelo": "P09A01",
+          "quantidade_sistema": 4,
+          "quantidade_contada": 0,
+          "diferenca": 0,
+          "observacao": "",
+          "quantidade_contada_2": null,
+          "quantidade_contada_3": null
+        },
+        {
+          "codigo": "CA-MPPCB037301XX",
+          "codigo_produto": 11608719978,
+          "descricao": "PLACA DE CIRCUITO IMPRESSO MODULO 0 - 10V REV1",
+          "modelo": "P09A01",
+          "quantidade_sistema": 4,
+          "quantidade_contada": 0,
+          "diferenca": 0,
+          "observacao": "",
+          "quantidade_contada_2": null,
+          "quantidade_contada_3": null
+        },
+        {
+          "codigo": "CA-MPPCB039301XX",
+          "codigo_produto": 11628244954,
+          "descricao": "PLACA DE CIRCUITO IMPRESSO RGBW PRO",
+          "modelo": "P09A01",
+          "quantidade_sistema": 0,
+          "quantidade_contada": 0,
+          "diferenca": 0,
+          "observacao": "",
+          "quantidade_contada_2": null,
+          "quantidade_contada_3": null
+        }
+      ],
+      "criado_por": "Sistema",
+      "modificado_por": "Sistema",
+      "data_conclusao": "2026-02-11T19:12:59.387Z",
+      "concluido_por": "Leonardo"
+    }
+  ]
+}

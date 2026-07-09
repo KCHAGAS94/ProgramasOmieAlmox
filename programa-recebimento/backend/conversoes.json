@@ -1,0 +1,26 @@
+{
+  "26699": {
+    "CT_CT": {
+      "unidade_pedido": "CT",
+      "unidade_nfe": "CT",
+      "fator": 100,
+      "atualizado_em": "2026-02-12T14:35:29.759Z"
+    }
+  },
+  "CA-MPMEC051201XX": {
+    "UND_CT": {
+      "unidade_pedido": "UND",
+      "unidade_nfe": "CT",
+      "fator": 100,
+      "atualizado_em": "2026-02-12T11:51:56.213Z"
+    }
+  },
+  "CA-MPCAR039201XX": {
+    "UN_PC": {
+      "unidade_pedido": "UN",
+      "unidade_nfe": "PC",
+      "fator": 1,
+      "atualizado_em": "2026-02-12T11:38:53.031Z"
+    }
+  }
+}

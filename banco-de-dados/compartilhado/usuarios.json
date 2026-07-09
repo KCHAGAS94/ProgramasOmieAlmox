@@ -1,0 +1,16 @@
+{
+  "usuarios": [
+    {
+      "id": "1752093320692",
+      "nome": "Kenedy Chagas Dev",
+      "email": "kenedychagasdev@kchagas.com",
+      "senha": "$2b$10$Pt3TEQHY9Hm9cAWvEFD26.Lkg2zxJfVz6a.EMfFCGOmINGU3Q.wKO",
+      "tipo": "admin",
+      "almoxarifado": false,
+      "ativo": true,
+      "criadoEm": "2026-07-09T17:35:20.6921780-03:00",
+      "atualizadoEm": "2026-07-09T17:35:20.6921780-03:00"
+    }
+  ],
+  "permissoes": []
+}

@@ -1,0 +1,17 @@
+{
+  "name": "programa-estoque-backend",
+  "version": "1.0.0",
+  "description": "Backend do Programa Estoque - Gestão de Estoque de Produtos Acabados",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["estoque", "omie", "produtos"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "axios": "^1.6.7"
+  }
+}

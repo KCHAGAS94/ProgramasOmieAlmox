@@ -1,0 +1,19 @@
+{
+  "1100_317132": {
+    "numero_pedido": "1100",
+    "numero_nfe": "317132",
+    "contagens": {
+      "1100_317132_4830075": {
+        "entradas": [
+          {
+            "quantidade": 480,
+            "data": "13/02/2026, 16:05:43"
+          }
+        ],
+        "totalContado": 480
+      }
+    },
+    "modificado_por": "Leonardo",
+    "atualizado_em": "2026-02-13T19:36:33.773Z"
+  }
+}

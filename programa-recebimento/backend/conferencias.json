@@ -1,0 +1,24 @@
+[
+  {
+    "numero_pedido": "1100",
+    "numero_nfe": "317132",
+    "itens": [
+      {
+        "codigo_nfe": "4830075",
+        "quantidade_nfe": 0,
+        "quantidade_fisica": 480,
+        "conferido_por": {
+          "id": "1",
+          "nome": "Leonardo",
+          "email": "producao@controlart.com.br",
+          "tipo": "admin",
+          "ativo": true,
+          "criadoEm": "2026-02-11T10:00:00.000Z",
+          "atualizadoEm": "2026-02-11T16:28:32.015Z"
+        },
+        "conferido_em": "2026-02-13T19:36:33.765Z"
+      }
+    ],
+    "atualizado_em": "2026-02-13T19:36:33.765Z"
+  }
+]
