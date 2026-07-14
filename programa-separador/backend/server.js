@@ -460,7 +460,80 @@ function toFloat(val) {
   }
 }
 
+// ================== REGRA: AUTO-NÃO-SEPARAR (Espelho + IVOLV da mesma cor) ==================
+
+// Cores canônicas aceitas. Cada entrada mapeia as variações de texto (masculino/feminino)
+// que podem aparecer na descrição do produto para uma cor canônica única.
+const CORES_CANONICAS = [
+  { cor: 'PRETO', variantes: ['PRETO', 'PRETA'] },
+  { cor: 'BRANCO', variantes: ['BRANCO', 'BRANCA'] },
+  { cor: 'GRAFITE', variantes: ['GRAFITE'] }
+];
+
+function ehItemEspelho(descricao) {
+  return /\bESPELHO\b/i.test(descricao || '');
+}
+
+function ehItemIvolv(descricao) {
+  return /\bIVOLV\b/i.test(descricao || '');
+}
+
+function ehSemEngrave(descricao) {
+  return /SEM\s+ENGRAVE/i.test(descricao || '');
+}
+
+// Extrai a cor canônica da descrição de um Espelho. Só reconhece as 3 cores válidas
+// (PRETO TEXTURIZADO, BRANCO TEXTURIZADO, GRAFITE TEXTURIZADO); qualquer outra cor retorna null,
+// o que força a separação física (não entra na regra de auto-não-separar).
+function extrairCorEspelho(descricao) {
+  const desc = (descricao || '').toUpperCase();
+  if (!/TEXTURIZADO/.test(desc)) return null;
+  for (const { cor, variantes } of CORES_CANONICAS) {
+    if (variantes.some(v => new RegExp(`\\b${v}\\b`).test(desc))) {
+      return cor;
+    }
+  }
+  return null;
+}
+
+// Extrai a cor canônica da descrição de um IVOLV (cores fixas: TECLA PRETA/PRETO, TECLA BRANCA/BRANCO, TECLA GRAFITE).
+function extrairCorIvolv(descricao) {
+  const desc = (descricao || '').toUpperCase();
+  for (const { cor, variantes } of CORES_CANONICAS) {
+    if (variantes.some(v => new RegExp(`\\b${v}\\b`).test(desc))) {
+      return cor;
+    }
+  }
+  return null;
+}
+
+// Percorre os itens NA SEQUÊNCIA ORIGINAL do pedido do Omie (antes de qualquer agrupamento) e marca,
+// para cada IVOLV "SEM ENGRAVE" cujo item imediatamente anterior é um Espelho da mesma cor,
+// autoNaoSeparar = true e kanban = true (flag "Não Separar" automática).
+function aplicarRegraAutoNaoSeparar(itens) {
+  for (let i = 0; i < itens.length; i++) {
+    const atual = itens[i];
+    atual.autoNaoSeparar = false;
+
+    if (i === 0) continue;
+    if (!ehItemIvolv(atual.descricao) || !ehSemEngrave(atual.descricao)) continue;
+
+    const anterior = itens[i - 1];
+    if (!ehItemEspelho(anterior.descricao)) continue;
+
+    const corEspelho = extrairCorEspelho(anterior.descricao);
+    const corIvolv = extrairCorIvolv(atual.descricao);
+
+    if (corEspelho && corIvolv && corEspelho === corIvolv) {
+      atual.autoNaoSeparar = true;
+      atual.kanban = true;
+    }
+  }
+}
+
 function aggregateItensPorDescricao(itens, pedidoId) {
+  aplicarRegraAutoNaoSeparar(itens);
+
   const agg = {};
 
   for (const it of itens) {
@@ -468,13 +541,16 @@ function aggregateItensPorDescricao(itens, pedidoId) {
     const codigo = (it.codigo || '').trim();
     const local = (it.local || '').trim();
     const preMontado = (it.pre_montado || '').trim();
+    const autoNaoSeparar = !!it.autoNaoSeparar;
 
-    // Agrupa por local + pre_montado se ambos existirem; senão por codigo+descricao
+    // Agrupa por local + pre_montado + autoNaoSeparar se local/pre_montado existirem; senão por codigo+descricao.
+    // autoNaoSeparar entra na chave para nunca misturar, na mesma linha/lista de seriais, itens que
+    // precisam ser separados fisicamente com itens que não precisam (cor do IVOLV bate com o Espelho acima).
     let keyAgg;
     if (local && preMontado) {
-      keyAgg = `LOCAL_PRE|||${local}|||${preMontado}`;
+      keyAgg = `LOCAL_PRE|||${local}|||${preMontado}|||${autoNaoSeparar}`;
     } else {
-      keyAgg = `INDIVIDUAL|||${codigo}|||${desc}`;
+      keyAgg = `INDIVIDUAL|||${codigo}|||${desc}|||${autoNaoSeparar}`;
     }
 
     if (!agg[keyAgg]) {
@@ -487,8 +563,13 @@ function aggregateItensPorDescricao(itens, pedidoId) {
         local: it.local,
         pre_montado: it.pre_montado,
         separado: false,
-        transferido: false
+        transferido: false,
+        autoNaoSeparar: false
       };
+    }
+
+    if (autoNaoSeparar) {
+      agg[keyAgg].autoNaoSeparar = true;
     }
 
     // Adiciona código se não estiver na lista
@@ -575,7 +656,8 @@ function aggregateItensPorDescricao(itens, pedidoId) {
     e.separado = flags.separado || false;
     e.transferido = flags.transferido || false;
     const kanbanAuto = String(e.local || '').toLowerCase().includes('kanban');
-    e.kanban = ('kanban' in flags) ? !!flags.kanban : kanbanAuto;
+    // autoNaoSeparar (Espelho + IVOLV da mesma cor) força kanban=true, sem depender de clique manual
+    e.kanban = e.autoNaoSeparar ? true : (('kanban' in flags) ? !!flags.kanban : kanbanAuto);
 
     // Garante que todos os elementos sejam strings antes de juntar
     const dadosLimpos = e.dados.map(d => {

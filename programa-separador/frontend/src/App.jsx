@@ -907,13 +907,14 @@ function App() {
                           );
                         }).map((item, idx) => {
                           const temKanban = (item.local || '').toLowerCase().includes('kanban');
+                          const autoNaoSeparar = !!item.autoNaoSeparar;
 
-                          const rowBg = temKanban
+                          const rowBg = (temKanban || autoNaoSeparar)
                             ? (darkMode ? '#064e3b' : '#d1fae5')
                             : (idx % 2 === 0
                               ? (darkMode ? '#1f2937' : '#ffffff')
                               : (darkMode ? '#111827' : '#f9fafb'));
-                          const rowHoverBg = temKanban
+                          const rowHoverBg = (temKanban || autoNaoSeparar)
                             ? (darkMode ? '#065f46' : '#a7f3d0')
                             : (darkMode ? '#263244' : '#f1f5f9');
                           const borderColor = darkMode ? '#374151' : '#f1f5f9';
@@ -1015,6 +1016,7 @@ function App() {
                               <td style={{padding: '8px 6px', textAlign: 'center', borderBottom: `1px solid ${borderColor}`}}>
                                 <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px'}}>
                                   <div
+                                    title={autoNaoSeparar ? 'Não separar automático: mesma cor do Espelho acima' : undefined}
                                     onClick={() => !pedidoConcluido && toggleFlag(pedidoData.pedido_id, item.descricao, 'kanban')}
                                     style={{
                                       width: '36px', height: '36px', borderRadius: '50%', cursor: pedidoConcluido ? 'default' : 'pointer',
