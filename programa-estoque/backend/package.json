@@ -6,12 +6,17 @@
   "scripts": {
     "start": "node server.js"
   },
-  "keywords": ["estoque", "omie", "produtos"],
+  "keywords": [
+    "estoque",
+    "omie",
+    "produtos"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.18.2",
+    "axios": "^1.6.7",
     "cors": "^2.8.5",
-    "axios": "^1.6.7"
+    "dotenv": "^16.6.1",
+    "express": "^4.18.2"
   }
 }

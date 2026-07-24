@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
@@ -20,9 +21,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// Credenciais Omie
-const OMIE_APP_KEY = 'OMIE_APP_KEY_REDACTED';
-const OMIE_APP_SECRET = 'OMIE_APP_SECRET_REDACTED';
+// Credenciais Omie (definidas no .env, não versionado)
+const OMIE_APP_KEY = process.env.OMIE_APP_KEY;
+const OMIE_APP_SECRET = process.env.OMIE_APP_SECRET;
+
+if (!OMIE_APP_KEY || !OMIE_APP_SECRET) {
+  console.error('❌ OMIE_APP_KEY e/ou OMIE_APP_SECRET não definidos. Configure o arquivo backend/.env');
+  process.exit(1);
+}
 
 // Estado global do progresso da atualização Omie (consultado pelo frontend)
 let progressoAtualizacao = {
