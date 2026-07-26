@@ -4,9 +4,12 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
 
 const app = express();
 const PORT = 4008;
@@ -14,6 +17,13 @@ const PORT = 4008;
 // Caminho do banco de dados
 const DB_DIR = path.join(__dirname, '..', '..', 'banco-de-dados', 'auxiliares');
 const CAIXAS_FILE = path.join(DB_DIR, 'caixas.json');
+
+// Credenciais Omie (vêm do .env na raiz do projeto)
+const OMIE_APP_KEY = process.env.OMIE_APP_KEY;
+const OMIE_APP_SECRET = process.env.OMIE_APP_SECRET;
+if (!OMIE_APP_KEY || !OMIE_APP_SECRET) {
+  console.warn('⚠️ OMIE_APP_KEY e/ou OMIE_APP_SECRET não definidos no .env.');
+}
 
 app.use(cors());
 app.use(express.json());
@@ -171,8 +181,6 @@ app.delete('/api/caixas/:id', (req, res) => {
 // CONSULTAR PRODUTO
 // ========================================
 
-const OMIE_APP_KEY = '2694922638408';
-const OMIE_APP_SECRET = '02995c034ba5ba2ef1a297240bbb5bf5';
 const PRODUTOS_INVENTARIO = path.join(__dirname, '..', '..', 'banco-de-dados', 'inventario', 'produtos.json');
 
 // Buscar produtos na base local (pesquisa por código ou descrição)

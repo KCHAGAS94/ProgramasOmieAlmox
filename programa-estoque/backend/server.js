@@ -1,9 +1,9 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const fs = require('fs');
-const path = require('path');
 
 const app = express();
 const PORT = 4005;
@@ -21,12 +21,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// Credenciais Omie (aceitam .env, mas também possuem fallback para manter o sistema iniciando)
-const OMIE_APP_KEY = process.env.OMIE_APP_KEY || '2694922638408';
-const OMIE_APP_SECRET = process.env.OMIE_APP_SECRET || '02995c034ba5ba2ef1a297240bbb5bf5';
-
-if (!process.env.OMIE_APP_KEY || !process.env.OMIE_APP_SECRET) {
-  console.warn('⚠️ OMIE_APP_KEY e/ou OMIE_APP_SECRET não definidos no .env. Usando valores padrão de fallback para permitir o startup.');
+// Credenciais Omie (vêm do .env na raiz do projeto)
+const OMIE_APP_KEY = process.env.OMIE_APP_KEY;
+const OMIE_APP_SECRET = process.env.OMIE_APP_SECRET;
+if (!OMIE_APP_KEY || !OMIE_APP_SECRET) {
+  console.warn('⚠️ OMIE_APP_KEY e/ou OMIE_APP_SECRET não definidos no .env.');
 }
 
 // Estado global do progresso da atualização Omie (consultado pelo frontend)

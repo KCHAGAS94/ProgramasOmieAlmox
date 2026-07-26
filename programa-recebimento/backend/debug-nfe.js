@@ -6,12 +6,14 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import initSqlJs from 'sql.js';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const OMIE_APP_KEY = "2694922638408";
-const OMIE_APP_SECRET = "02995c034ba5ba2ef1a297240bbb5bf5";
+dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
+const OMIE_APP_KEY = process.env.OMIE_APP_KEY;
+const OMIE_APP_SECRET = process.env.OMIE_APP_SECRET;
 const OMIE_URL = "https://app.omie.com.br/api/v1/produtos/recebimentonfe/";
 const XML_DB_PATH = path.join(__dirname, '..', '..', 'banco-de-dados', 'xml-nfe.db');
 

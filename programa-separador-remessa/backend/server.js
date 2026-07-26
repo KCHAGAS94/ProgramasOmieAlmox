@@ -4,9 +4,12 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, '..', '..', '.env') });
 
 const app = express();
 const PORT = 4004;
@@ -19,9 +22,15 @@ const EDICOES_FILE = path.join(DB_DIR, 'remessas-edicoes.json');
 // Caminho para o arquivo de remessas completas salvas
 const REMESSAS_SALVAS_FILE = path.join(DB_DIR, 'remessas-salvas.json');
 
-// Configurações Omie
-const OMIE_APP_KEY = "2694922638408";
-const OMIE_APP_SECRET = "02995c034ba5ba2ef1a297240bbb5bf5";
+// Garante que o diretório de dados exista antes de qualquer leitura/escrita
+fs.mkdirSync(DB_DIR, { recursive: true });
+
+// Configurações Omie (credenciais vêm do .env na raiz do projeto)
+const OMIE_APP_KEY = process.env.OMIE_APP_KEY;
+const OMIE_APP_SECRET = process.env.OMIE_APP_SECRET;
+if (!OMIE_APP_KEY || !OMIE_APP_SECRET) {
+  console.warn('⚠️ OMIE_APP_KEY e/ou OMIE_APP_SECRET não definidos no .env.');
+}
 const OMIE_REMESSA_URL = "https://app.omie.com.br/api/v1/produtos/remessa/";
 const OMIE_PRODUTO_URL = "https://app.omie.com.br/api/v1/geral/produtos/";
 

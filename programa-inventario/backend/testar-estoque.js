@@ -1,7 +1,9 @@
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 const axios = require('axios');
 
-const OMIE_APP_KEY = '2694922638408';
-const OMIE_APP_SECRET = '02995c034ba5ba2ef1a297240bbb5bf5';
+const OMIE_APP_KEY = process.env.OMIE_APP_KEY;
+const OMIE_APP_SECRET = process.env.OMIE_APP_SECRET;
 
 async function testarEstoque() {
   try {

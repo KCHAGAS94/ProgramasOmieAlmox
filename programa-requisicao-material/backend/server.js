@@ -1,11 +1,19 @@
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const fs = require('fs');
-const path = require('path');
 
 const app = express();
 const PORT = 4011;
+
+// Credenciais Omie (vêm do .env na raiz do projeto)
+const OMIE_APP_KEY = process.env.OMIE_APP_KEY;
+const OMIE_APP_SECRET = process.env.OMIE_APP_SECRET;
+if (!OMIE_APP_KEY || !OMIE_APP_SECRET) {
+  console.warn('⚠️ OMIE_APP_KEY e/ou OMIE_APP_SECRET não definidos no .env.');
+}
 
 // Configuração CORS
 app.use(cors());
@@ -551,10 +559,6 @@ app.get('/api/produtos/:codigoProduto', async (req, res) => {
     const { codigoProduto } = req.params;
 
     console.log(`[OMIE] Consultando produto ${codigoProduto} para buscar modelo`);
-
-    // Configurações da API Omie (mesmas do inventário)
-    const OMIE_APP_KEY = '2694922638408';
-    const OMIE_APP_SECRET = '02995c034ba5ba2ef1a297240bbb5bf5';
 
     const response = await axios.post('https://app.omie.com.br/api/v1/geral/produtos/', {
       call: 'ConsultarProduto',
