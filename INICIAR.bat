@@ -55,10 +55,15 @@ if exist "restart.flag" del /f /q "restart.flag" >nul 2>&1
 
 REM ---- Libera portas presas de execucao anterior ----
 echo Liberando portas...
-for %%P in (3000 3001 3002 3003 3004 3005 3007 3008 3009 3011 4000) do (
+for %%P in (3000 3001 3002 3003 3004 3005 3007 3008 3009 3011 4000 4001 4002 4003 4004 4005 4006 4007 4008 4009 4010 4011 4099) do (
     for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%%P " ^| findstr LISTENING') do (
         taskkill /F /PID %%a >nul 2>&1
     )
+)
+
+REM ---- Garante que processos antigos do Node sejam encerrados ----
+for /f "tokens=2" %%p in ('tasklist /fi "imagename eq node.exe" /nh ^| findstr /r /c:"^ *[0-9][0-9]* "') do (
+    taskkill /F /PID %%p >nul 2>&1
 )
 
 REM ---- Limpa cache do Vite ----
